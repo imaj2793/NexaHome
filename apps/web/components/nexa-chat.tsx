@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sendNexaMessage, type NexaState } from '@/lib/nexa';
+import { sendNexaMessage, speakNexa, type NexaState } from '@/lib/nexa';
 import { connectSocket } from '@/lib/socket';
+import NexaRobot from '@/components/nexa-robot';
 
 interface ChatMessage {
   id: number;
@@ -16,12 +17,6 @@ interface NexaStateEvent {
   message?: string;
 }
 
-const STATE_LABELS: Partial<Record<NexaState, string>> = {
-  LISTENING: 'Mendengarkan…',
-  THINKING: 'Berpikir…',
-  SPEAKING: 'Berbicara…',
-};
-
 let nextId = 0;
 
 export default function NexaChat() {
@@ -31,6 +26,7 @@ export default function NexaChat() {
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<NexaState | null>(null);
+  const [lastReply, setLastReply] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll ke bawah setiap kali daftar pesan berubah.
@@ -39,12 +35,15 @@ export default function NexaChat() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, pending, status]);
 
-  // Status live via WebSocket.
+  // Status live via WebSocket (state + pesan → robot visual).
   useEffect(() => {
     const socket = connectSocket();
     socket.on('nexa.state', (data: NexaStateEvent) => {
       if (data && typeof data.state === 'string') {
         setStatus(data.state);
+        if (typeof data.message === 'string' && data.message) {
+          setLastReply(data.message);
+        }
       }
     });
     return () => {
@@ -67,6 +66,8 @@ export default function NexaChat() {
         { id: nextId++, role: 'nexa', text: res.message },
       ]);
       setStatus(res.state);
+      setLastReply(res.message);
+      speakNexa(res.message);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Gagal menghubungi Nexa.';
@@ -82,14 +83,13 @@ export default function NexaChat() {
   return (
     <section className="flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-900/60">
       <header className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
-        <span className="text-xl">🤖</span>
         <span className="font-semibold tracking-tight">Nexa</span>
-        {status && (
-          <span className="ml-auto rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2.5 py-0.5 text-xs text-indigo-300">
-            {STATE_LABELS[status] ?? status}
-          </span>
-        )}
       </header>
+
+      {/* Robot visual — dipisah dari AI Core (blueprint §40) */}
+      <div className="border-b border-slate-800 bg-slate-950/40 px-4 py-5">
+        <NexaRobot state={status ?? 'IDLE'} message={lastReply ?? undefined} />
+      </div>
 
       <div
         ref={listRef}

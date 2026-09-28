@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AIProvider, ChatMessage, createAIProvider } from '@nexahome/ai';
+import {
+  AIProvider,
+  ChatMessage,
+  createAIProvider,
+  createSpeechProvider,
+  SpeechProvider,
+} from '@nexahome/ai';
 import { DeviceGateway } from '../device-core/device.gateway';
 import { NexaToolsService } from './nexa-tools.service';
 
@@ -20,11 +26,13 @@ export interface NexaChatResult {
 /**
  * Nexa AI Service (blueprint §11–§14). Provider-independent: membaca konfigurasi
  * AI dari env, memanggil provider lewat abstraction layer, lalu mengeksekusi
- * tool-call lewat NexaToolsService (yang dijaga safety layer §26).
+ * tool-call lewat NexaToolsService (safety layer §26). Setiap perubahan state
+ * di-broadcast lewat WebSocket (§17) agar visual mode (§15) ikut ter-update.
  */
 @Injectable()
 export class NexaService {
   private provider: AIProvider | null = null;
+  private speech: SpeechProvider | null = null;
 
   constructor(
     private readonly config: ConfigService,
@@ -32,15 +40,27 @@ export class NexaService {
     private readonly gateway: DeviceGateway,
   ) {}
 
+  private aiConfig() {
+    return {
+      apiKey: this.config.get<string>('AI_API_KEY') ?? '',
+      model: this.config.get<string>('AI_MODEL') ?? 'gpt-4o-mini',
+    };
+  }
+
   private getProvider(): AIProvider {
     if (!this.provider) {
       const name = this.config.get<string>('AI_PROVIDER')?.trim() || 'mock';
-      this.provider = createAIProvider(name, {
-        apiKey: this.config.get<string>('AI_API_KEY') ?? '',
-        model: this.config.get<string>('AI_MODEL') ?? 'gpt-4o-mini',
-      });
+      this.provider = createAIProvider(name, this.aiConfig());
     }
     return this.provider;
+  }
+
+  private getSpeechProvider(): SpeechProvider {
+    if (!this.speech) {
+      const name = this.config.get<string>('AI_PROVIDER')?.trim() || 'mock';
+      this.speech = createSpeechProvider(name, this.aiConfig());
+    }
+    return this.speech;
   }
 
   async chat(userId: string, message: string): Promise<NexaChatResult> {
@@ -73,22 +93,34 @@ export class NexaService {
           userId,
         });
 
-        return {
+        const result: NexaChatResult = {
           message: exec.success ? exec.message : `Maaf, ${exec.message}`,
           state: exec.success ? 'HAPPY' : 'WARNING',
           tool: { name: call.function.name, success: exec.success },
         };
+        this.gateway.emitNexaState('', result.state, result.message);
+        return result;
       }
 
-      return {
+      const result: NexaChatResult = {
         message: assistant.content || 'Maaf, saya tidak bisa menjawab itu.',
         state: 'SPEAKING',
       };
+      this.gateway.emitNexaState('', result.state, result.message);
+      return result;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { message: `Maaf, terjadi kesalahan: ${msg}`, state: 'ERROR' };
-    } finally {
-      this.gateway.emitNexaState('', 'SPEAKING');
+      const result: NexaChatResult = {
+        message: `Maaf, terjadi kesalahan: ${msg}`,
+        state: 'ERROR',
+      };
+      this.gateway.emitNexaState('', 'ERROR', result.message);
+      return result;
     }
+  }
+
+  /** Text-to-speech untuk voice feedback (blueprint §12, §15). */
+  async synthesize(text: string): Promise<Buffer> {
+    return this.getSpeechProvider().synthesize(text);
   }
 }
