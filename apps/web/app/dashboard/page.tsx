@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   api,
   type ApiActivityLog,
@@ -114,8 +115,16 @@ export default function DashboardPage() {
       <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
-            <span className="text-xl">🤖</span>
-            <span className="font-semibold tracking-tight">NexaHome</span>
+            <Image
+              src="/logo.png"
+              alt="NexaHome"
+              width={32}
+              height={32}
+              className="rounded-lg"
+            />
+            <span className="bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent font-semibold tracking-tight">
+              NexaHome
+            </span>
           </div>
           <div className="flex items-center gap-4">
             <span className="hidden text-sm text-slate-400 sm:block">

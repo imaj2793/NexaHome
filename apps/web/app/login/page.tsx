@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { api, type ApiUser } from '@/lib/api';
 import { setSession } from '@/lib/auth';
 
@@ -38,12 +39,16 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="text-4xl">🤖</div>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight">
-            NexaHome
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
+        <div className="mb-8 flex flex-col items-center">
+          <Image
+            src="/logo.png"
+            alt="NexaHome"
+            width={128}
+            height={128}
+            priority
+            className="rounded-2xl shadow-lg shadow-indigo-500/20 ring-1 ring-slate-800"
+          />
+          <p className="mt-4 text-sm text-slate-400">
             Your Home. Connected. Intelligent.
           </p>
         </div>
@@ -81,7 +86,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium transition hover:bg-indigo-500 disabled:opacity-50"
+            className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 py-2 text-sm font-medium text-white transition hover:from-indigo-500 hover:to-cyan-500 disabled:opacity-50"
           >
             {loading ? 'Memproses…' : 'Masuk'}
           </button>
