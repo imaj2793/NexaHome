@@ -17,4 +17,8 @@ export class DeviceGateway {
   ): void {
     this.server?.emit('device:state', { homeId, deviceId, state });
   }
+
+  emitNexaState(homeId: string, state: string, message?: string): void {
+    this.server?.emit('nexa.state', { homeId, state, message });
+  }
 }

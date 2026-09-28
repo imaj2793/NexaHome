@@ -199,6 +199,9 @@ importers:
       '@nestjs/websockets':
         specifier: ^12.1.1
         version: 12.1.1(@nestjs/common@12.1.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.1)(@nestjs/platform-socket.io@12.1.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nexahome/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@nexahome/device-core':
         specifier: workspace:*
         version: link:../../packages/device-core
@@ -306,6 +309,15 @@ importers:
       '@nexahome/device-core':
         specifier: workspace:*
         version: link:../../packages/device-core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/ai:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

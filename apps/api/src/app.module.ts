@@ -7,6 +7,7 @@ import { HomesModule } from './homes/homes.module';
 import { RoomsModule } from './rooms/rooms.module';
 import { DevicesModule } from './devices/devices.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { NexaModule } from './nexa/nexa.module';
 import { ActivityLogModule } from './activity-log/activity-log.module';
 import { HealthModule } from './health/health.module';
 
@@ -20,6 +21,7 @@ import { HealthModule } from './health/health.module';
     RoomsModule,
     DevicesModule,
     IntegrationsModule,
+    NexaModule,
     ActivityLogModule,
     HealthModule,
   ],

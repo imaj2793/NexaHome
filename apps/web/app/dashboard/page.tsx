@@ -11,6 +11,7 @@ import {
 } from '@/lib/api';
 import { clearSession, getToken, getUser } from '@/lib/auth';
 import { connectSocket, type DeviceStateEvent } from '@/lib/socket';
+import NexaChat from '@/components/nexa-chat';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -144,8 +145,10 @@ export default function DashboardPage() {
           </p>
         )}
 
-        {loading ? (
-          <p className="mt-8 text-slate-400">Memuat…</p>
+        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[1fr_360px]">
+          <div className="min-w-0">
+            {loading ? (
+              <p className="text-slate-400">Memuat…</p>
         ) : !home ? (
           <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-8 text-center text-slate-400">
             Belum ada home. Jalankan <code className="text-indigo-400">pnpm db:seed</code>{' '}
@@ -239,7 +242,13 @@ export default function DashboardPage() {
               </div>
             </div>
           </>
-        )}
+          )}
+          </div>
+
+          <aside className="h-[70vh] xl:sticky xl:top-20">
+            <NexaChat />
+          </aside>
+        </div>
       </div>
     </main>
   );

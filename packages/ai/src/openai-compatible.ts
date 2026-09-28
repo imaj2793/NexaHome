@@ -1,0 +1,103 @@
+import type {
+  AIChatResponse,
+  AIProvider,
+  AIProviderConfig,
+  ChatMessage,
+  ToolCall,
+  ToolDefinition,
+} from './chat';
+
+/** Base URL default bila tidak di-override lewat konfigurasi. */
+const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+
+/** Bentuk pesan balasan mentah dari `/chat/completions`. */
+interface OpenAICompletionResponse {
+  choices?: Array<{
+    message?: {
+      role?: string;
+      content?: string | null;
+      name?: string;
+      tool_calls?: ToolCall[];
+      tool_call_id?: string;
+    };
+  }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+  };
+}
+
+/**
+ * Provider chat yang kompatibel dengan API OpenAI (atau server/proxy apa pun
+ * yang meniru endpoint `/chat/completions` — mis. Ollama, LocalAI, OpenRouter).
+ */
+export class OpenAICompatibleProvider implements AIProvider {
+  readonly name = 'openai';
+
+  private readonly config: AIProviderConfig;
+
+  constructor(config: AIProviderConfig) {
+    this.config = config;
+  }
+
+  private get baseUrl(): string {
+    return this.config.baseUrl ?? DEFAULT_BASE_URL;
+  }
+
+  async chat(params: {
+    messages: ChatMessage[];
+    tools?: ToolDefinition[];
+  }): Promise<AIChatResponse> {
+    // ToolDefinition dikirim dalam format tools OpenAI: { type: 'function', function: {...} }.
+    const body = {
+      model: this.config.model,
+      messages: params.messages,
+      ...(params.tools && params.tools.length > 0
+        ? {
+            tools: params.tools.map((tool) => ({
+              type: 'function' as const,
+              function: tool,
+            })),
+          }
+        : {}),
+    };
+
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(
+        `OpenAI API error (${response.status}): ${detail || response.statusText}`,
+      );
+    }
+
+    const data = (await response.json()) as OpenAICompletionResponse;
+    const raw = data.choices?.[0]?.message;
+
+    const message: ChatMessage = {
+      role: (raw?.role as ChatMessage['role']) ?? 'assistant',
+      content: typeof raw?.content === 'string' ? raw.content : '',
+    };
+
+    // Pertahankan tool_calls serta metadata lain bila ada pada balasan.
+    if (raw?.tool_calls) message.tool_calls = raw.tool_calls;
+    if (raw?.name) message.name = raw.name;
+    if (raw?.tool_call_id) message.tool_call_id = raw.tool_call_id;
+
+    const usage = data.usage
+      ? {
+          promptTokens: data.usage.prompt_tokens ?? 0,
+          completionTokens: data.usage.completion_tokens ?? 0,
+        }
+      : undefined;
+
+    return { message, usage };
+  }
+}
