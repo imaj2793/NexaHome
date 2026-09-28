@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { sendNexaMessage, speakNexa, type NexaState } from '@/lib/nexa';
 import { connectSocket } from '@/lib/socket';
 import NexaRobot from '@/components/nexa-robot';
+import NexaRobotView from '@/components/nexa-robot-view';
 
 interface ChatMessage {
   id: number;
@@ -27,6 +28,7 @@ export default function NexaChat() {
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<NexaState | null>(null);
   const [lastReply, setLastReply] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll ke bawah setiap kali daftar pesan berubah.
@@ -84,6 +86,16 @@ export default function NexaChat() {
     <section className="flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-900/60">
       <header className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
         <span className="font-semibold tracking-tight">Nexa</span>
+        <button
+          onClick={() => setFullscreen(true)}
+          title="Lihat robot layar penuh"
+          aria-label="Lihat robot layar penuh"
+          className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+        </button>
       </header>
 
       {/* Robot visual — dipisah dari AI Core (blueprint §40) */}
@@ -108,7 +120,7 @@ export default function NexaChat() {
             <div
               className={`max-w-[75%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm ${
                 m.role === 'user'
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white'
                   : m.role === 'error'
                     ? 'border border-red-500/30 bg-red-500/10 text-red-300'
                     : 'border border-slate-700 bg-slate-800 text-slate-200'
@@ -145,11 +157,19 @@ export default function NexaChat() {
         <button
           type="submit"
           disabled={pending || !input.trim()}
-          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+          className="rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-4 py-2 text-sm font-medium text-white transition hover:from-indigo-500 hover:to-cyan-500 disabled:opacity-50"
         >
           Kirim
         </button>
       </form>
+
+      {fullscreen && (
+        <NexaRobotView
+          state={status ?? 'IDLE'}
+          message={lastReply ?? undefined}
+          onClose={() => setFullscreen(false)}
+        />
+      )}
     </section>
   );
 }

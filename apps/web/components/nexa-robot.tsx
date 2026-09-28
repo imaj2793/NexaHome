@@ -5,6 +5,7 @@ import type { NexaState } from '@/lib/nexa';
 interface NexaRobotProps {
   state: NexaState;
   message?: string;
+  size?: 'sm' | 'xl';
 }
 
 interface RobotVisual {
@@ -34,7 +35,7 @@ const VISUALS: Record<NexaState, RobotVisual> = {
   EXCITED: { label: 'Semangat', ring: 'border-fuchsia-400/60', glow: 'bg-fuchsia-400', headAnim: 'nexa-excited', accent: 'text-fuchsia-300' },
 };
 
-export default function NexaRobot({ state, message }: NexaRobotProps) {
+export default function NexaRobot({ state, message, size = 'sm' }: NexaRobotProps) {
   const v = VISUALS[state] ?? VISUALS.IDLE;
   const happy = state === 'HAPPY' || state === 'EXCITED';
   const sleeping = state === 'SLEEPING';
@@ -43,42 +44,62 @@ export default function NexaRobot({ state, message }: NexaRobotProps) {
   const negative = state === 'ERROR' || state === 'WARNING';
   const confused = state === 'CONFUSED';
 
+  const face = (
+    <div className={`relative ${v.headAnim}`}>
+      <div className={`absolute -inset-3 rounded-full ${v.glow} opacity-20 blur-lg`} />
+      <div
+        className={`relative flex h-24 w-24 flex-col items-center justify-center gap-2.5 rounded-[2rem] border-2 ${v.ring} bg-gradient-to-b from-slate-800 to-slate-950`}
+      >
+        {/* antena */}
+        <div className="absolute -top-4 flex flex-col items-center">
+          <div className={`h-3 w-0.5 ${v.glow}`} />
+          <div className={`h-2 w-2 rounded-full ${v.glow}`} />
+        </div>
+
+        {/* mata */}
+        <div className="flex gap-2.5">
+          <div className={eye(happy, sleeping, negative, listening)} />
+          <div className={eye(happy, sleeping, negative, listening)} />
+        </div>
+
+        {/* mulut */}
+        {talking ? (
+          <div className="flex items-center gap-1">
+            <span className="nexa-mouth-talk h-3.5 w-1 rounded-full bg-white" />
+            <span className="nexa-mouth-talk h-3.5 w-1 rounded-full bg-white [animation-delay:0.1s]" />
+            <span className="nexa-mouth-talk h-3.5 w-1 rounded-full bg-white [animation-delay:0.2s]" />
+          </div>
+        ) : (
+          <div className={mouth(happy, confused, negative, sleeping, listening)} />
+        )}
+      </div>
+    </div>
+  );
+
+  if (size === 'xl') {
+    return (
+      <div className="flex flex-col items-center">
+        <div className="flex h-80 items-center justify-center">
+          <div style={{ transform: 'scale(3)' }}>{face}</div>
+        </div>
+        <span className={`text-2xl font-semibold uppercase tracking-wide ${v.accent}`}>
+          {v.label}
+        </span>
+        {message && (
+          <p className="mt-3 max-w-md text-center text-lg leading-relaxed text-slate-300">
+            {message}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center gap-2.5">
-      <div className={`relative ${v.headAnim}`}>
-        <div className={`absolute -inset-3 rounded-full ${v.glow} opacity-20 blur-lg`} />
-        <div
-          className={`relative flex h-24 w-24 flex-col items-center justify-center gap-2.5 rounded-[2rem] border-2 ${v.ring} bg-gradient-to-b from-slate-800 to-slate-950`}
-        >
-          {/* antena */}
-          <div className="absolute -top-4 flex flex-col items-center">
-            <div className={`h-3 w-0.5 ${v.glow}`} />
-            <div className={`h-2 w-2 rounded-full ${v.glow}`} />
-          </div>
-
-          {/* mata */}
-          <div className="flex gap-2.5">
-            <div className={eye(happy, sleeping, negative, listening)} />
-            <div className={eye(happy, sleeping, negative, listening)} />
-          </div>
-
-          {/* mulut */}
-          {talking ? (
-            <div className="flex items-center gap-1">
-              <span className="nexa-mouth-talk h-3.5 w-1 rounded-full bg-white" />
-              <span className="nexa-mouth-talk h-3.5 w-1 rounded-full bg-white [animation-delay:0.1s]" />
-              <span className="nexa-mouth-talk h-3.5 w-1 rounded-full bg-white [animation-delay:0.2s]" />
-            </div>
-          ) : (
-            <div className={mouth(happy, confused, negative, sleeping, listening)} />
-          )}
-        </div>
-      </div>
-
+      {face}
       <span className={`text-xs font-semibold uppercase tracking-wide ${v.accent}`}>
         {v.label}
       </span>
-
       {message && (
         <p className="line-clamp-2 max-w-[240px] text-center text-xs leading-relaxed text-slate-400">
           {message}

@@ -111,7 +111,7 @@ export default function DashboardPage() {
   const user = getUser();
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-[radial-gradient(ellipse_60%_40%_at_50%_-10%,rgba(99,102,241,0.12),transparent)]">
       <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
@@ -168,16 +168,23 @@ export default function DashboardPage() {
             {/* Stat cards */}
             <div className="mt-6 grid grid-cols-3 gap-4">
               {[
-                { label: 'Devices', value: stats.total },
-                { label: 'Active', value: stats.active },
-                { label: 'Offline', value: stats.offline },
+                { label: 'Perangkat', value: stats.total, icon: '💡' },
+                { label: 'Aktif', value: stats.active, icon: '🟢' },
+                { label: 'Mati', value: stats.offline, icon: '⚪' },
               ].map((s) => (
                 <div
                   key={s.label}
-                  className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4"
+                  className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 transition hover:border-slate-700"
                 >
-                  <div className="text-3xl font-semibold">{s.value}</div>
-                  <div className="mt-1 text-sm text-slate-400">{s.label}</div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                      {s.label}
+                    </span>
+                    <span className="text-lg">{s.icon}</span>
+                  </div>
+                  <div className="mt-2 bg-gradient-to-r from-indigo-300 to-cyan-300 bg-clip-text text-3xl font-semibold text-transparent">
+                    {s.value}
+                  </div>
                 </div>
               ))}
             </div>
@@ -280,7 +287,7 @@ function DeviceCard({
   const powered = state.power === true;
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 transition hover:border-slate-700">
       <div className="flex items-start justify-between">
         <div>
           <div className="font-medium">{device.name}</div>
@@ -293,7 +300,7 @@ function DeviceCard({
           disabled={busy}
           className={`h-10 w-10 rounded-full text-lg transition ${
             powered
-              ? 'bg-amber-400 text-amber-950'
+              ? 'bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 shadow-[0_0_16px_rgba(251,191,36,0.35)]'
               : 'bg-slate-800 text-slate-400'
           } disabled:opacity-50`}
           aria-label={powered ? 'Matikan' : 'Nyalakan'}
