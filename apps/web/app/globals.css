@@ -60,3 +60,10 @@ body {
 .nexa-wave { animation: nexa-wave 0.5s ease-in-out infinite; transform-origin: center; }
 .nexa-dot { animation: nexa-dot 1.2s ease-in-out infinite; }
 .nexa-pop { animation: nexa-pop 0.45s ease-out; }
+
+/* ── background particles ── */
+@keyframes nexa-particle {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.25; }
+  50% { transform: translateY(-14px) scale(1.15); opacity: 0.9; }
+}
+.nexa-particle { animation: nexa-particle 6s ease-in-out infinite; }
