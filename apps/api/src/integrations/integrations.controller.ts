@@ -2,19 +2,24 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../auth/current-user.decorator';
+import { DeviceCoreService } from '../device-core/device-core.service';
 import { IntegrationsService } from './integrations.service';
 import { CreateIntegrationDto } from './dto/create-integration.dto';
 
 @Controller('integrations')
 @UseGuards(JwtAuthGuard)
 export class IntegrationsController {
-  constructor(private readonly integrationsService: IntegrationsService) {}
+  constructor(
+    private readonly integrationsService: IntegrationsService,
+    private readonly deviceCore: DeviceCoreService,
+  ) {}
 
   @Get()
   findAll(
@@ -30,5 +35,10 @@ export class IntegrationsController {
     @Body() dto: CreateIntegrationDto,
   ) {
     return this.integrationsService.create(user.id, dto);
+  }
+
+  @Post(':id/discover')
+  discover(@CurrentUser() user: CurrentUserData, @Param('id') id: string) {
+    return this.deviceCore.discover(user.id, id);
   }
 }

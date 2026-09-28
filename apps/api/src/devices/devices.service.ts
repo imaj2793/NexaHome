@@ -4,13 +4,25 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { DeviceCoreService } from '../device-core/device-core.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { DeviceCommandDto } from './dto/device-command.dto';
 
+const VALID_ACTIONS = [
+  'turn_on',
+  'turn_off',
+  'set_brightness',
+  'set_color',
+  'set_temperature',
+];
+
 @Injectable()
 export class DevicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly deviceCore: DeviceCoreService,
+  ) {}
 
   async findAll(userId: string, homeId?: string, roomId?: string) {
     if (homeId) await this.assertHomeOwned(userId, homeId);
@@ -71,43 +83,17 @@ export class DevicesService {
   }
 
   async command(userId: string, id: string, dto: DeviceCommandDto) {
-    const device = await this.assertDeviceOwned(userId, id);
-    const current = (device.state ?? {}) as Record<string, unknown>;
-    const next: Record<string, unknown> = { ...current };
-    let message: string;
-
-    switch (dto.action) {
-      case 'turn_on':
-        next.power = true;
-        message = `${device.name} dinyalakan.`;
-        break;
-      case 'turn_off':
-        next.power = false;
-        message = `${device.name} dimatikan.`;
-        break;
-      case 'set_brightness':
-        next.brightness = dto.value;
-        next.power = (dto.value ?? 0) > 0;
-        message = `${device.name} kecerahan ${dto.value}%.`;
-        break;
-      default:
-        throw new BadRequestException(`Command tidak dikenal: ${dto.action}`);
+    if (!VALID_ACTIONS.includes(dto.action)) {
+      throw new BadRequestException(`Command tidak dikenal: ${dto.action}`);
     }
 
-    await this.prisma.device.update({
-      where: { id },
-      data: { state: next as object },
+    const device = await this.prisma.device.findFirst({
+      where: { id, home: { ownerId: userId } },
+      include: { integration: true },
     });
-    await this.prisma.activityLog.create({
-      data: {
-        homeId: device.homeId,
-        deviceId: device.id,
-        level: 'INFO',
-        message,
-      },
-    });
+    if (!device) throw new NotFoundException('Perangkat tidak ditemukan.');
 
-    return { deviceId: id, state: next, message };
+    return this.deviceCore.executeCommand(device, dto.action, dto.value);
   }
 
   private async assertHomeOwned(userId: string, homeId: string) {

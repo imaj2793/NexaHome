@@ -37,12 +37,26 @@ async function main() {
     where: { homeId: home.id, name: 'Ruang Tamu' },
   });
 
+  const wizIntegration = await prisma.integration.upsert({
+    where: { id: 'integration_wiz' },
+    update: {},
+    create: {
+      id: 'integration_wiz',
+      name: 'WiZ',
+      type: 'WIZ',
+      homeId: home.id,
+      config: { mode: 'mock' },
+    },
+  });
+
   const sampleDevices = [
     {
       id: 'device_living_light',
       name: 'Lampu Ruang Tamu',
       type: 'light',
       roomId: livingRoom?.id ?? null,
+      integrationId: wizIntegration.id,
+      externalId: 'wiz_aabbccddeeff',
       capabilities: ['power', 'brightness', 'color', 'temperature'],
       state: { power: true, brightness: 80 },
     },
@@ -51,6 +65,8 @@ async function main() {
       name: 'Lampu Kamar',
       type: 'light',
       roomId: null,
+      integrationId: wizIntegration.id,
+      externalId: 'wiz_112233445566',
       capabilities: ['power', 'brightness'],
       state: { power: false, brightness: 40 },
     },
@@ -59,7 +75,7 @@ async function main() {
   for (const d of sampleDevices) {
     await prisma.device.upsert({
       where: { id: d.id },
-      update: {},
+      update: { integrationId: d.integrationId, externalId: d.externalId },
       create: { ...d, homeId: home.id },
     });
   }

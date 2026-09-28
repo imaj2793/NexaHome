@@ -1,12 +1,10 @@
-import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class DeviceCommandDto {
   @IsString()
   action!: string;
 
+  // value fleksibel: number (brightness/temperature) atau object (color).
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  value?: number;
+  value?: unknown;
 }

@@ -113,6 +113,7 @@ model Device {
   homeId        String
   roomId        String?
   integrationId String?
+  externalId    String?
   capabilities  String[]
   state         Json          @default("{}")
   home          Home          @relation(fields: [homeId], references: [id], onDelete: Cascade)

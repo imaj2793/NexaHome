@@ -10,6 +10,7 @@ import {
   type ApiRoom,
 } from '@/lib/api';
 import { clearSession, getToken, getUser } from '@/lib/auth';
+import { connectSocket, type DeviceStateEvent } from '@/lib/socket';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -55,6 +56,22 @@ export default function DashboardPage() {
     }
     load();
   }, [load, router]);
+
+  // Live update via WebSocket: state perangkat berubah → perbarui tanpa reload.
+  useEffect(() => {
+    if (!getToken()) return;
+    const socket = connectSocket();
+    socket.on('device:state', (data: DeviceStateEvent) => {
+      setDevices((prev) =>
+        prev.map((d) =>
+          d.id === data.deviceId ? { ...d, state: data.state } : d,
+        ),
+      );
+    });
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   async function toggleDevice(device: ApiDevice) {
     const state = device.state as { power?: boolean };
