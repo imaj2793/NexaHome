@@ -1,0 +1,264 @@
+// NexaHome — Prisma schema (blueprint §6: entity utama)
+// Lihat BLUEPRINT.md untuk relasi & penjelasan arsitektur.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────
+
+enum Role {
+  OWNER
+  ADMIN
+  USER
+}
+
+enum IntegrationType {
+  WIZ
+  MQTT
+  ESP32
+  HOME_ASSISTANT
+}
+
+enum NexaState {
+  IDLE
+  LISTENING
+  THINKING
+  SPEAKING
+  HAPPY
+  CONFUSED
+  WARNING
+  ERROR
+  SLEEPING
+  EXCITED
+}
+
+enum AutomationTriggerType {
+  SCHEDULE
+  DEVICE_STATE
+  SENSOR
+}
+
+enum ActivityLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+// ── Models ───────────────────────────────────────────────
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String?
+  role          Role           @default(OWNER)
+  ownedHomes    Home[]         @relation("HomeOwner")
+  memberships   HomeMember[]
+  notifications Notification[]
+  aiConversations AIConversation[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Home {
+  id           String        @id @default(cuid())
+  name         String
+  ownerId      String
+  owner        User          @relation("HomeOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members      HomeMember[]
+  rooms        Room[]
+  devices      Device[]
+  scenes       Scene[]
+  automations  Automation[]
+  integrations Integration[]
+  activityLogs ActivityLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model HomeMember {
+  id        String   @id @default(cuid())
+  homeId    String
+  userId    String
+  role      Role     @default(USER)
+  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([homeId, userId])
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  name      String
+  homeId    String
+  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  devices   Device[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([homeId, name])
+}
+
+model Device {
+  id            String        @id @default(cuid())
+  name          String
+  type          String
+  homeId        String
+  roomId        String?
+  integrationId String?
+  capabilities  String[]
+  state         Json          @default("{}")
+  home          Home          @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  room          Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  integration   Integration?  @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  states        DeviceState[]
+  activityLogs  ActivityLog[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([homeId])
+}
+
+model DeviceState {
+  id        String   @id @default(cuid())
+  deviceId  String
+  key       String
+  value     Json
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
+
+  @@unique([deviceId, key])
+}
+
+model Integration {
+  id        String          @id @default(cuid())
+  name      String
+  type      IntegrationType
+  homeId    String
+  enabled   Boolean         @default(true)
+  config    Json            @default("{}")
+  home      Home            @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  devices   Device[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([homeId])
+}
+
+model Scene {
+  id        String        @id @default(cuid())
+  name      String
+  homeId    String
+  home      Home          @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  actions   SceneAction[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model SceneAction {
+  id       String @id @default(cuid())
+  sceneId  String
+  deviceId String
+  action   Json
+  scene    Scene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@index([sceneId])
+}
+
+model Automation {
+  id        String              @id @default(cuid())
+  name      String
+  homeId    String
+  enabled   Boolean             @default(true)
+  home      Home                @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  triggers  AutomationTrigger[]
+  actions   AutomationAction[]
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+}
+
+model AutomationTrigger {
+  id           String                @id @default(cuid())
+  automationId String
+  type         AutomationTriggerType @default(SCHEDULE)
+  config       Json                  @default("{}")
+  automation   Automation            @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId])
+}
+
+model AutomationAction {
+  id           String     @id @default(cuid())
+  automationId String
+  deviceId     String?
+  action       Json
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId])
+}
+
+model ActivityLog {
+  id        String           @id @default(cuid())
+  homeId    String?
+  deviceId  String?
+  level     ActivityLogLevel @default(INFO)
+  message   String
+  home      Home?            @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  device    Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  createdAt DateTime         @default(now())
+
+  @@index([homeId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String?
+  read      Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AIConversation {
+  id        String      @id @default(cuid())
+  userId    String
+  title     String?
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  AIMessage[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model AIMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  commands       AICommand[]
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId])
+}
+
+model AICommand {
+  id        String    @id @default(cuid())
+  messageId String
+  tool      String
+  arguments Json      @default("{}")
+  success   Boolean?
+  message   AIMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}

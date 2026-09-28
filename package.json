@@ -1,0 +1,23 @@
+{
+  "name": "nexahome",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NexaHome — open-source smart home platform with Nexa AI assistant",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @nexahome/api prisma:generate",
+    "db:migrate": "pnpm --filter @nexahome/api prisma:migrate",
+    "db:seed": "pnpm --filter @nexahome/api prisma:seed",
+    "db:studio": "pnpm --filter @nexahome/api prisma:studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.5",
+    "typescript": "^5.9.3"
+  }
+}

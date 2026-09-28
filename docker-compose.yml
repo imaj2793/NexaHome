@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexahome-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexahome
+      POSTGRES_PASSWORD: nexahome
+      POSTGRES_DB: nexahome
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexahome -d nexahome"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: nexahome-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto/config:/mosquitto/config
+      - mqtt_data:/mosquitto/data
+
+volumes:
+  postgres_data:
+  mqtt_data:
