@@ -4,16 +4,14 @@ import { getToken } from './auth';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 
 export type NexaState =
-  | 'IDLE'
-  | 'LISTENING'
-  | 'THINKING'
-  | 'SPEAKING'
-  | 'HAPPY'
-  | 'CONFUSED'
-  | 'WARNING'
-  | 'ERROR'
-  | 'SLEEPING'
-  | 'EXCITED';
+  | 'IDLE' // Mode Standby
+  | 'LISTENING' // Sedang Mendengarkan
+  | 'THINKING' // Sedang Berpikir
+  | 'PROCESSING' // Sedang Memproses
+  | 'SUCCESS' // Perintah Berhasil
+  | 'ERROR' // Terjadi Kesalahan
+  | 'READY' // Sedang Siaga
+  | 'SLEEPING'; // Mode Malam/Tidur
 
 export interface NexaChatResponse {
   message: string;

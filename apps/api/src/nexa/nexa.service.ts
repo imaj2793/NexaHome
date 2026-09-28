@@ -89,13 +89,14 @@ export class NexaService {
           args = {};
         }
 
+        this.gateway.emitNexaState('', 'PROCESSING');
         const exec = await this.tools.execute(call.function.name, args, {
           userId,
         });
 
         const result: NexaChatResult = {
           message: exec.success ? exec.message : `Maaf, ${exec.message}`,
-          state: exec.success ? 'HAPPY' : 'WARNING',
+          state: exec.success ? 'SUCCESS' : 'ERROR',
           tool: { name: call.function.name, success: exec.success },
         };
         this.gateway.emitNexaState('', result.state, result.message);
@@ -104,7 +105,7 @@ export class NexaService {
 
       const result: NexaChatResult = {
         message: assistant.content || 'Maaf, saya tidak bisa menjawab itu.',
-        state: 'SPEAKING',
+        state: 'SUCCESS',
       };
       this.gateway.emitNexaState('', result.state, result.message);
       return result;

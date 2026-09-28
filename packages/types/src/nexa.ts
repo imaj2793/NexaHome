@@ -1,17 +1,15 @@
 import { z } from 'zod';
 
-/** State visual Nexa (blueprint §16). */
+/** State visual Nexa (blueprint §16) — 8 ekspresi. */
 export const NexaStateSchema = z.enum([
   'IDLE',
   'LISTENING',
   'THINKING',
-  'SPEAKING',
-  'HAPPY',
-  'CONFUSED',
-  'WARNING',
+  'PROCESSING',
+  'SUCCESS',
   'ERROR',
+  'READY',
   'SLEEPING',
-  'EXCITED',
 ]);
 export type NexaState = z.infer<typeof NexaStateSchema>;
 
