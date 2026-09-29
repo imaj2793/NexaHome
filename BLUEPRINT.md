@@ -6,6 +6,8 @@
 
 NexaHome dirancang dengan pendekatan **local-first, modular, extensible**, sehingga perangkat dan layanan dapat ditambahkan tanpa mengubah keseluruhan sistem.
 
+> **Status (Sep 2026):** Phase 1–8 ✅ selesai. Dokumen aktif: [`docs/PRD.md`](docs/PRD.md) (produk), [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) (setup & kontribusi), [`docs/API.md`](docs/API.md) (endpoint). Blueprint ini adalah desain referensi awal; sebagian telah berevolusi (mis. state robot → 8 ekspresi) — utamakan dokumen `docs/` untuk kondisi terkini.
+
 ---
 
 # 1. Konsep Utama
