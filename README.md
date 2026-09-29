@@ -2,8 +2,7 @@
 
 > **Your Home. Connected. Intelligent.**
 
-NexaHome adalah platform **smart home open-source** — pusat untuk mengelola perangkat rumah, automation, scenes, monitoring, dan asisten AI bernama **Nexa**. Arsitektur lengkap ada di [`BLUEPRINT.md`](./BLUEPRINT.md) dan visi produk di [`IDEA.md`](./IDEA.md).
-
+NexaHome adalah platform **smart home open-source** — pusat untuk mengelola perangkat rumah, automation, scenes, monitoring, dan asisten AI bernama **Nexa**. 
 ## Tech Stack
 
 | Lapisan | Teknologi |
