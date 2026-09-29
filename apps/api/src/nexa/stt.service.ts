@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { execFile } from 'child_process';
+import { existsSync } from 'fs';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -23,17 +24,48 @@ const execFileAsync = promisify(execFile);
 @Injectable()
 export class SttService {
   private readonly logger = new Logger(SttService.name);
+  /** Hasil pemeriksaan model di-cache: path tidak berubah saat runtime. */
+  private cachedModel?: string | null;
 
   constructor(private readonly config: ConfigService) {}
 
+  /**
+   * True bila whisper.cpp benar-benar siap dipakai: `WHISPER_MODEL` diisi dan
+   * file-nya benar-benar ada di filesystem. Pemeriksaan file mencegah status
+   * "siap" yang menyesatkan di container yang hanya membawa path placeholder.
+   * Client memakai ini untuk menampilkan mode terbatas, bukan mengirim audio
+   * yang pasti ditolak.
+   */
+  isConfigured(): boolean {
+    return this.modelPath() !== null;
+  }
+
+  /**
+   * Path model yang benar-benar bisa dipakai, atau `null` bila env kosong atau
+   * file-nya tidak ada. Dicek satu kali lalu di-cache karena path tidak berubah
+   * selama process hidup.
+   */
+  private modelPath(): string | null {
+    if (this.cachedModel === undefined) {
+      const model = this.config.get<string>('WHISPER_MODEL')?.trim();
+      this.cachedModel = model && existsSync(model) ? model : null;
+      if (model && this.cachedModel === null) {
+        this.logger.warn(
+          `WHISPER_MODEL diisi tapi file tidak ditemukan: ${model} — STT nonaktif.`,
+        );
+      }
+    }
+    return this.cachedModel;
+  }
+
   async transcribe(audio: Buffer, opts?: { language?: string }): Promise<string> {
     const bin = this.config.get<string>('WHISPER_BIN')?.trim() || 'whisper-cli';
-    const model = this.config.get<string>('WHISPER_MODEL')?.trim();
+    const model = this.modelPath();
     const language = opts?.language ?? this.config.get<string>('WHISPER_LANG') ?? 'id';
 
     if (!model) {
       throw new Error(
-        'WHISPER_MODEL belum dikonfigurasi — isi path model ggml di .env.',
+        'STT belum siap — WHISPER_MODEL kosong atau file model tidak ditemukan.',
       );
     }
 

@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  fetchNexaStatus,
   sendNexaMessage,
   speakNexa,
   stripWakeWord,
   transcribeAudio,
+  type NexaCapabilities,
   type NexaState,
 } from '@/lib/nexa';
 import { connectSocket } from '@/lib/socket';
@@ -35,6 +37,8 @@ export default function NexaChat() {
   const [status, setStatus] = useState<NexaState | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [recording, setRecording] = useState(false);
+  // null = status belum diketahui (endpoint belum ada / API lama).
+  const [caps, setCaps] = useState<NexaCapabilities | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -55,6 +59,31 @@ export default function NexaChat() {
     });
     return () => {
       socket.disconnect();
+    };
+  }, []);
+
+  // Mode terbatas harus terlihat jelas, bukan muncul sebagai error saat dipakai.
+  useEffect(() => {
+    let active = true;
+    fetchNexaStatus().then((result) => {
+      if (!active || !result) return;
+      setCaps(result);
+      if (!result.degraded) return;
+      const notes: string[] = [];
+      if (result.llm === 'mock') {
+        notes.push('jawaban Nexa memakai mode demo (AI_PROVIDER=mock)');
+      }
+      if (!result.stt.configured) {
+        notes.push('perintah suara belum aktif (WHISPER_MODEL belum diisi)');
+      }
+      if (notes.length === 0) return;
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId++, role: 'nexa', text: `ℹ️ Saat ini ${notes.join(' dan ')}.` },
+      ]);
+    });
+    return () => {
+      active = false;
     };
   }, []);
 
@@ -81,6 +110,7 @@ export default function NexaChat() {
         ...prev,
         { id: nextId++, role: 'error', text: `⚠️ ${message}` },
       ]);
+      setStatus('ERROR');
     } finally {
       setPending(false);
     }
@@ -163,12 +193,15 @@ export default function NexaChat() {
       setStatus(res.state);
       speakNexa(res.message);
     } catch (err) {
+      // 503 dari backend berarti STT belum siap/gagal — beri tahu bahwa
+      // mengetik tetap bisa dilakukan, dan kembalikan state agar tidak menggantung.
       const message =
         err instanceof Error ? err.message : 'Gagal memproses suara.';
       setMessages((prev) => [
         ...prev,
         { id: nextId++, role: 'error', text: `⚠️ ${message}` },
       ]);
+      setStatus('IDLE');
     } finally {
       setPending(false);
     }
@@ -249,11 +282,13 @@ export default function NexaChat() {
         <button
           type="button"
           onClick={recording ? stopRecording : startRecording}
-          disabled={pending}
+          disabled={pending || caps?.stt.configured === false}
           title={
-            recording
-              ? 'Berhenti merekam'
-              : 'Mulai bicara — ucapkan "Hi Nexa"'
+            caps?.stt.configured === false
+              ? 'Perintah suara belum aktif — isi WHISPER_MODEL di server'
+              : recording
+                ? 'Berhenti merekam'
+                : 'Mulai bicara — ucapkan "Hi Nexa"'
           }
           aria-label={recording ? 'Berhenti merekam' : 'Mulai bicara'}
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-base transition disabled:opacity-50 ${

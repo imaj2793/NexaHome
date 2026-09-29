@@ -17,6 +17,25 @@ export interface NexaChatResponse {
   message: string;
   state: NexaState;
   tool?: { name: string; success: boolean };
+  degraded?: 'llm_unavailable' | 'tool_failed';
+}
+
+/** Kemampuan Nexa saat ini (mode mock / STT belum siap). */
+export interface NexaCapabilities {
+  aiProvider: string;
+  llm: 'mock' | 'live';
+  tts: 'mock' | 'live';
+  stt: { configured: boolean; engine: string };
+  degraded: boolean;
+}
+
+/** Status kemampuan Nexa; null bila endpoint tidak tersedia (API lama). */
+export async function fetchNexaStatus(): Promise<NexaCapabilities | null> {
+  try {
+    return await api<NexaCapabilities>('/nexa/status');
+  } catch {
+    return null;
+  }
 }
 
 /** Kirim pesan ke Nexa dan terima balasan (state emosi + teks). */

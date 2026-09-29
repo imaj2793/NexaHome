@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AIProvider,
@@ -22,6 +22,17 @@ export interface NexaChatResult {
   message: string;
   state: string;
   tool?: { name: string; success: boolean };
+  /** Alasan degradasi agar UI bisa memberi penjelasan (blueprint §27). */
+  degraded?: 'llm_unavailable' | 'tool_failed';
+}
+
+/** Kemampuan Nexa saat ini — dipakai UI agar mode terbatas terlihat. */
+export interface NexaCapabilities {
+  aiProvider: string;
+  llm: 'mock' | 'live';
+  tts: 'mock' | 'live';
+  stt: { configured: boolean; engine: string };
+  degraded: boolean;
 }
 
 /**
@@ -32,6 +43,7 @@ export interface NexaChatResult {
  */
 @Injectable()
 export class NexaService {
+  private readonly logger = new Logger(NexaService.name);
   private provider: AIProvider | null = null;
   private speech: SpeechProvider | null = null;
 
@@ -40,6 +52,27 @@ export class NexaService {
     private readonly tools: NexaToolsService,
     private readonly gateway: DeviceGateway,
   ) {}
+
+  private providerName(): string {
+    return this.config.get<string>('AI_PROVIDER')?.trim() || 'mock';
+  }
+
+  /**
+   * Kemampuan Nexa saat ini. Client memanggilnya untuk membedakan "Nexa sedang
+   * berpikir" dari "fitur ini belum dikonfigurasi" — mode mock atau terbatas
+   * harus terlihat jelas, bukan disamarkan sebagai error.
+   */
+  capabilities(sttConfigured: boolean): NexaCapabilities {
+    const provider = this.providerName();
+    const isMock = provider === 'mock';
+    return {
+      aiProvider: provider,
+      llm: isMock ? 'mock' : 'live',
+      tts: isMock ? 'mock' : 'live',
+      stt: { configured: sttConfigured, engine: 'whisper.cpp' },
+      degraded: isMock || !sttConfigured,
+    };
+  }
 
   private aiConfig() {
     return {
@@ -51,16 +84,14 @@ export class NexaService {
 
   private getProvider(): AIProvider {
     if (!this.provider) {
-      const name = this.config.get<string>('AI_PROVIDER')?.trim() || 'mock';
-      this.provider = createAIProvider(name, this.aiConfig());
+      this.provider = createAIProvider(this.providerName(), this.aiConfig());
     }
     return this.provider;
   }
 
   private getSpeechProvider(): SpeechProvider {
     if (!this.speech) {
-      const name = this.config.get<string>('AI_PROVIDER')?.trim() || 'mock';
-      this.speech = createSpeechProvider(name, this.aiConfig());
+      this.speech = createSpeechProvider(this.providerName(), this.aiConfig());
     }
     return this.speech;
   }
@@ -94,6 +125,9 @@ export class NexaService {
               assistant.content || 'Maaf, saya tidak bisa menjawab itu.',
             state: lastTool && !lastTool.success ? 'ERROR' : 'SUCCESS',
             ...(lastTool ? { tool: lastTool } : {}),
+            ...(lastTool && !lastTool.success
+              ? { degraded: 'tool_failed' as const }
+              : {}),
           };
           this.gateway.emitNexaState('', result.state, result.message);
           return result;
@@ -131,10 +165,16 @@ export class NexaService {
       this.gateway.emitNexaState('', result.state, result.message);
       return result;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      // Detail (pesan provider, URL, dst.) hanya ke log server agar tidak
+      // membocorkan konfigurasi ke client.
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Chat Nexa gagal: ${detail}`);
       const result: NexaChatResult = {
-        message: `Maaf, terjadi kesalahan: ${msg}`,
+        message:
+          'Maaf, aku sedang kesulitan berpikir. Coba lagi sebentar, atau ' +
+          'perintah langsung dari dashboard.',
         state: 'ERROR',
+        degraded: 'llm_unavailable',
       };
       this.gateway.emitNexaState('', 'ERROR', result.message);
       return result;
