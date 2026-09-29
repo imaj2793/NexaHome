@@ -5,6 +5,9 @@ import {
   DeviceCoreService,
   ExecutableDevice,
 } from '../device-core/device-core.service';
+import { ScenesService } from '../scenes/scenes.service';
+import { AutomationService } from '../automation/automation.service';
+import { EnergyService } from '../energy/energy.service';
 
 /** Definisi tool Nexa yang bisa dipanggil LLM (blueprint §13). */
 export interface NexaToolDefinition {
@@ -38,6 +41,9 @@ export class NexaToolsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly deviceCore: DeviceCoreService,
+    private readonly scenes: ScenesService,
+    private readonly automation: AutomationService,
+    private readonly energy: EnergyService,
   ) {}
 
   /** Daftar seluruh tool + JSON Schema yang bisa dipanggil LLM. */
@@ -217,11 +223,11 @@ export class NexaToolsService {
         case 'get_room_status':
           return await this.getRoomStatus(args, ctx);
         case 'activate_scene':
-          return this.stubPhase('Scene belum tersedia (fase 5).');
+          return await this.activateScene(args, ctx);
         case 'create_automation':
-          return this.stubPhase('Automation belum tersedia (fase 5).');
+          return await this.createAutomation(args, ctx);
         case 'get_energy_usage':
-          return this.stubPhase('Energy monitoring belum tersedia (fase 7).');
+          return await this.getEnergyUsage(args, ctx);
         default:
           return {
             success: false,
@@ -359,9 +365,76 @@ export class NexaToolsService {
     };
   }
 
-  /** Hasil stub untuk fitur yang belum diimplementasikan. */
-  private stubPhase(message: string): NexaToolResult {
-    return { success: false, message, result: null };
+  /** Tool: aktifkan scene berdasarkan nama (blueprint §18). */
+  private async activateScene(
+    args: Record<string, unknown>,
+    ctx: NexaToolContext,
+  ): Promise<NexaToolResult> {
+    const sceneName = this.requireString(args.scene_name);
+    if (sceneName === null) {
+      return this.invalidArg('scene_name harus berupa string non-kosong.');
+    }
+
+    const scene = await this.prisma.scene.findFirst({
+      where: {
+        home: { ownerId: ctx.userId },
+        name: { equals: sceneName, mode: 'insensitive' },
+      },
+    });
+    if (!scene) {
+      return {
+        success: false,
+        message: `Scene "${sceneName}" tidak ditemukan.`,
+        result: null,
+      };
+    }
+
+    const result = await this.scenes.activate(ctx.userId, scene.id);
+    return { success: true, message: result.message, result };
+  }
+
+  /** Tool: buat automation draft dari deskripsi (blueprint §19, §21). */
+  private async createAutomation(
+    args: Record<string, unknown>,
+    ctx: NexaToolContext,
+  ): Promise<NexaToolResult> {
+    const description = this.requireString(args.description);
+    if (description === null) {
+      return this.invalidArg('description harus berupa string non-kosong.');
+    }
+
+    const home = await this.prisma.home.findFirst({
+      where: { ownerId: ctx.userId },
+    });
+    if (!home) {
+      return { success: false, message: 'Home tidak ditemukan.', result: null };
+    }
+
+    const automation = await this.automation.create(ctx.userId, {
+      name: description,
+      homeId: home.id,
+      enabled: true,
+      triggers: [],
+      actions: [],
+    });
+    return {
+      success: true,
+      message: `Automation "${description}" dibuat (draft).`,
+      result: automation,
+    };
+  }
+
+  /** Tool: ringkasan pemakaian energi (blueprint fase 7). */
+  private async getEnergyUsage(
+    _args: Record<string, unknown>,
+    ctx: NexaToolContext,
+  ): Promise<NexaToolResult> {
+    const summary = await this.energy.summary(ctx.userId);
+    return {
+      success: true,
+      message: `Total pemakaian ${summary.totalWatts} W.`,
+      result: summary,
+    };
   }
 
   /**

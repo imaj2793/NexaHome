@@ -98,6 +98,28 @@ export class MockAIProvider implements AIProvider {
       };
     }
 
+    if (/scene|movie|suasana|mode/.test(text)) {
+      return {
+        message: toolCallMessage('activate_scene', {
+          scene_name: 'movie night',
+        }),
+      };
+    }
+
+    if (/energi|energy|pemakaian|watt|daya/.test(text)) {
+      return {
+        message: toolCallMessage('get_energy_usage', {}),
+      };
+    }
+
+    if (/automation|otomasi|jadwal|setiap/.test(text)) {
+      return {
+        message: toolCallMessage('create_automation', {
+          description: lastUser?.content ?? 'Automation baru',
+        }),
+      };
+    }
+
     // Fallback: balasan teks biasa.
     return {
       message: {

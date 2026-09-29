@@ -6,9 +6,11 @@ import Image from 'next/image';
 import {
   api,
   type ApiActivityLog,
+  type ApiAutomation,
   type ApiDevice,
   type ApiHome,
   type ApiRoom,
+  type ApiScene,
 } from '@/lib/api';
 import { clearSession, getToken, getUser } from '@/lib/auth';
 import { connectSocket, type DeviceStateEvent } from '@/lib/socket';
@@ -20,6 +22,9 @@ export default function DashboardPage() {
   const [rooms, setRooms] = useState<ApiRoom[]>([]);
   const [devices, setDevices] = useState<ApiDevice[]>([]);
   const [logs, setLogs] = useState<ApiActivityLog[]>([]);
+  const [scenes, setScenes] = useState<ApiScene[]>([]);
+  const [automations, setAutomations] = useState<ApiAutomation[]>([]);
+  const [busyScene, setBusyScene] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -33,18 +38,25 @@ export default function DashboardPage() {
         setRooms([]);
         setDevices([]);
         setLogs([]);
+        setScenes([]);
+        setAutomations([]);
         return;
       }
       const h = homes[0];
       setHome(h);
-      const [roomsRes, devicesRes, logsRes] = await Promise.all([
-        api<ApiRoom[]>(`/rooms?homeId=${h.id}`),
-        api<ApiDevice[]>(`/devices?homeId=${h.id}`),
-        api<ApiActivityLog[]>(`/activity-log?homeId=${h.id}&limit=50`),
-      ]);
+      const [roomsRes, devicesRes, logsRes, scenesRes, automationsRes] =
+        await Promise.all([
+          api<ApiRoom[]>(`/rooms?homeId=${h.id}`),
+          api<ApiDevice[]>(`/devices?homeId=${h.id}`),
+          api<ApiActivityLog[]>(`/activity-log?homeId=${h.id}&limit=50`),
+          api<ApiScene[]>(`/scenes?homeId=${h.id}`),
+          api<ApiAutomation[]>(`/automations?homeId=${h.id}`),
+        ]);
       setRooms(roomsRes);
       setDevices(devicesRes);
       setLogs(logsRes);
+      setScenes(scenesRes);
+      setAutomations(automationsRes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat data.');
     } finally {
@@ -109,6 +121,29 @@ export default function DashboardPage() {
   function logout() {
     clearSession();
     router.replace('/login');
+  }
+
+  async function activateScene(id: string) {
+    setBusyScene(id);
+    try {
+      await api(`/scenes/${id}/activate`, { method: 'POST' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menjalankan scene.');
+    } finally {
+      setBusyScene(null);
+    }
+  }
+
+  async function runAutomation(id: string) {
+    try {
+      await api(`/automations/${id}/run`, { method: 'POST' });
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Gagal menjalankan automation.',
+      );
+    }
   }
 
   const stats = useMemo(() => {
@@ -252,6 +287,78 @@ export default function DashboardPage() {
                   <p className="text-sm text-slate-500">
                     Belum ada perangkat.
                   </p>
+                )}
+              </div>
+            </div>
+
+            {/* Scenes */}
+            <div className="mt-8">
+              <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
+                Scenes
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {scenes.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => activateScene(s.id)}
+                    disabled={busyScene === s.id}
+                    className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm transition hover:border-cyan-500/50 disabled:opacity-50"
+                  >
+                    {s.name}
+                    <span className="ml-1 text-slate-500">
+                      · {s.actions.length} aksi
+                    </span>
+                  </button>
+                ))}
+                {!scenes.length && (
+                  <span className="text-sm text-slate-500">
+                    Belum ada scene.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Automations */}
+            <div className="mt-8">
+              <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
+                Automations
+              </h3>
+              <div className="space-y-2">
+                {automations.map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">{a.name}</div>
+                      <div className="truncate text-xs text-slate-500">
+                        {a.triggers
+                          .map(
+                            (t) =>
+                              (t.config as { time?: string }).time ?? t.type,
+                          )
+                          .join(', ')}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span
+                        className={`text-xs ${a.enabled ? 'text-emerald-400' : 'text-slate-500'}`}
+                      >
+                        {a.enabled ? 'Aktif' : 'Nonaktif'}
+                      </span>
+                      <button
+                        onClick={() => runAutomation(a.id)}
+                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:bg-slate-800"
+                      >
+                        Jalankan
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!automations.length && (
+                  <span className="text-sm text-slate-500">
+                    Belum ada automation.
+                  </span>
                 )}
               </div>
             </div>

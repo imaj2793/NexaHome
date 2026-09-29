@@ -43,6 +43,34 @@ export interface ApiActivityLog {
   device?: { id: string; name: string } | null;
 }
 
+export interface ApiScene {
+  id: string;
+  name: string;
+  homeId: string;
+  actions: Array<{
+    id: string;
+    deviceId: string;
+    action: Record<string, unknown>;
+  }>;
+}
+
+export interface ApiAutomation {
+  id: string;
+  name: string;
+  homeId: string;
+  enabled: boolean;
+  triggers: Array<{
+    id: string;
+    type: string;
+    config: Record<string, unknown>;
+  }>;
+  actions: Array<{
+    id: string;
+    deviceId: string | null;
+    action: Record<string, unknown>;
+  }>;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
