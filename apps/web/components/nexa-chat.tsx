@@ -27,7 +27,6 @@ export default function NexaChat() {
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<NexaState | null>(null);
-  const [lastReply, setLastReply] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -43,9 +42,6 @@ export default function NexaChat() {
     socket.on('nexa.state', (data: NexaStateEvent) => {
       if (data && typeof data.state === 'string') {
         setStatus(data.state);
-        if (typeof data.message === 'string' && data.message) {
-          setLastReply(data.message);
-        }
       }
     });
     return () => {
@@ -68,7 +64,6 @@ export default function NexaChat() {
         { id: nextId++, role: 'nexa', text: res.message },
       ]);
       setStatus(res.state);
-      setLastReply(res.message);
       speakNexa(res.message);
     } catch (err) {
       const message =
@@ -100,7 +95,7 @@ export default function NexaChat() {
 
       {/* Robot visual — dipisah dari AI Core (blueprint §40) */}
       <div className="border-b border-slate-800 bg-slate-950/40 px-4 py-5">
-        <NexaRobot state={status ?? 'IDLE'} message={lastReply ?? undefined} />
+        <NexaRobot state={status ?? 'IDLE'} />
       </div>
 
       <div
@@ -166,7 +161,6 @@ export default function NexaChat() {
       {fullscreen && (
         <NexaRobotView
           state={status ?? 'IDLE'}
-          message={lastReply ?? undefined}
           onClose={() => setFullscreen(false)}
         />
       )}

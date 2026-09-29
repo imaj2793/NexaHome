@@ -6,7 +6,6 @@ import NexaRobot from './nexa-robot';
 
 interface NexaRobotViewProps {
   state: NexaState;
-  message?: string;
   onClose: () => void;
 }
 
@@ -15,7 +14,7 @@ interface NexaRobotViewProps {
  * dalam ukuran besar + label + pesan. Menerima state sebagai prop sehingga tetap
  * live mengikuti event `nexa.state` dari parent.
  */
-export default function NexaRobotView({ state, message, onClose }: NexaRobotViewProps) {
+export default function NexaRobotView({ state, onClose }: NexaRobotViewProps) {
   // Tutup dengan Escape + kunci scroll body.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -43,7 +42,7 @@ export default function NexaRobotView({ state, message, onClose }: NexaRobotView
       </button>
 
       <div className="relative z-10">
-        <NexaRobot state={state} message={message} size="xl" />
+        <NexaRobot state={state} size="xl" />
       </div>
 
       <p className="absolute bottom-8 text-sm text-slate-500">
