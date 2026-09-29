@@ -1,0 +1,37 @@
+# Build context: jangan kirim artefak, dependensi, atau rahasia ke daemon Docker.
+
+# dependensi & build cache
+node_modules
+**/node_modules
+.turbo
+**/.turbo
+dist
+**/dist
+.next
+**/.next
+out
+coverage
+**/coverage
+*.tsbuildinfo
+
+# git & CI
+.git
+.github
+
+# environment & secrets
+**/.env
+**/.env.*
+!.env.example
+
+# log & editor
+*.log
+.DS_Store
+.idea
+.vscode
+
+# aset lokal besar (model whisper.cpp ~140MB, tidak dipakai di image)
+models
+
+# dokumentasi tidak diperlukan untuk runtime
+docs
+*.md

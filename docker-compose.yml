@@ -1,18 +1,32 @@
+# NexaHome — full stack produksi.
+#
+#   cp .env.example .env    # lalu ganti JWT_SECRET (minimal 32 karakter)
+#   docker compose up -d --build
+#
+# Web  : http://localhost:${WEB_PORT:-3000}
+# API  : http://localhost:${API_PORT:-3001}/api/health
+# MQTT : localhost:1883 (mosquitto)
+#
+# `migrate` adalah service one-shot: menjalankan `prisma migrate deploy`
+# lalu keluar dengan status 0. API baru start setelah migrasi sukses.
+
+name: nexahome
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: nexahome-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: nexahome
-      POSTGRES_PASSWORD: nexahome
-      POSTGRES_DB: nexahome
+      POSTGRES_USER: ${POSTGRES_USER:-nexahome}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexahome}
+      POSTGRES_DB: ${POSTGRES_DB:-nexahome}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexahome -d nexahome"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexahome} -d ${POSTGRES_DB:-nexahome}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -27,6 +41,90 @@ services:
     volumes:
       - ./docker/mosquitto/config:/mosquitto/config
       - mqtt_data:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -t 'nexahome/health' -C 1 -W 3 -q true || exit 0"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  # Migrasi database sekali jalan (ganti image migrate bila schema berubah).
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    container_name: nexahome-migrate
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nexahome}:${POSTGRES_PASSWORD:-nexahome}@postgres:5432/${POSTGRES_DB:-nexahome}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runner
+    image: nexahome/api:local
+    container_name: nexahome-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nexahome}:${POSTGRES_PASSWORD:-nexahome}@postgres:5432/${POSTGRES_DB:-nexahome}?schema=public
+      # Wajib diisi: nilai default di .env.example ditolak oleh validateEnv.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi. Jalankan `cp .env.example .env` lalu ganti nilainya (minimal 32 karakter).}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      JWT_REFRESH_EXPIRES_DAYS: ${JWT_REFRESH_EXPIRES_DAYS:-30}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.deepseek.com/v1}
+      AI_MODEL: ${AI_MODEL:-deepseek-chat}
+      # Broker mosquitto selalu dinyalakan oleh compose ini, jadi adapter MQTT
+      # memakai mode nyata. Untuk demo tanpa broker, tambahkan
+      # `MQTT_MODE: mock` lewat docker-compose.override.yml.
+      MQTT_URL: ${DOCKER_MQTT_URL:-mqtt://mqtt:1883}
+      MQTT_MODE: mqtt
+      # Tasmota/WiZ butuh broadcast/mDNS ke jaringan LAN, yang sulit dijangkau
+      # dari container bridge, jadi default-nya mock.
+      TASMOTA_MODE: ${TASMOTA_MODE:-mock}
+      WIZ_MODE: ${WIZ_MODE:-mock}
+      WIZ_DISCOVERY_ENABLED: ${WIZ_DISCOVERY_ENABLED:-true}
+      # whisper.cpp/ffmpeg tidak dibundel di image API; STT aktif bila biner
+      # dan model tersedia di container (lihat docs/DEPLOYMENT.md).
+      WHISPER_BIN: ${WHISPER_BIN:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-}
+      WHISPER_LANG: ${WHISPER_LANG:-id}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      # NEXT_PUBLIC_* di-inline saat build → argumen wajib, bukan env runtime.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}
+    image: nexahome/web:local
+    container_name: nexahome-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   postgres_data:
