@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { IntegrationType } from '@prisma/client';
 import { DiscoveredDevice, IntegrationManager } from '@nexahome/device-core';
 import { Bonjour, Browser, Service } from 'bonjour-service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,11 +22,20 @@ const VENDOR_TO_TYPE: Record<string, string> = {
   mqtt: 'MQTT',
 };
 
+export interface ConnectDevicePayload {
+  id: string;
+  name: string;
+  type: string;
+  capabilities?: string[];
+  state?: Record<string, unknown>;
+  vendor?: string;
+}
+
 export interface ConnectDeviceInput {
   homeId: string;
   roomId?: string | null;
   integrationId?: string | null;
-  device: DiscoveredDevice;
+  device: ConnectDevicePayload;
 }
 
 /**
@@ -76,13 +85,13 @@ export class DiscoveryService {
     } else {
       const type = VENDOR_TO_TYPE[device.vendor ?? ''] ?? 'MQTT';
       integration = await this.prisma.integration.findFirst({
-        where: { homeId, type: type as Prisma.IntegrationType },
+        where: { homeId, type: type as IntegrationType },
       });
       if (!integration) {
         integration = await this.prisma.integration.create({
           data: {
             name: type,
-            type: type as Prisma.IntegrationType,
+            type: type as IntegrationType,
             homeId,
             enabled: true,
             config: {},
