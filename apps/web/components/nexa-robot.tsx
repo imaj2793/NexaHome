@@ -14,30 +14,28 @@ interface RobotVisual {
   ring: string;
   glow: string;
   accent: string;
-  headAnim: string;
 }
 
 /**
- * Visual robot Nexa (blueprint §15, §16, §40). Murni presentasional — hanya
- * menerima `state` + `message`, tidak tahu apa pun tentang AI Core. Ekspresi
- * mengikuti 8 state buatan user, lengkap dengan animasi per state.
+ * Visual robot Nexa (blueprint §15, §16, §40). Murni presentasional. Animasi
+ * difokuskan pada mata (kedip + putaran saat loading), bukan gerakan badan.
  */
 const VISUALS: Record<NexaState, RobotVisual> = {
-  IDLE: { label: 'Mode Standby', ring: 'border-teal-400/50', glow: 'bg-teal-400', headAnim: 'nexa-bob', accent: 'text-teal-300' },
-  LISTENING: { label: 'Sedang Mendengarkan', ring: 'border-cyan-400/60', glow: 'bg-cyan-400', headAnim: '', accent: 'text-cyan-300' },
-  THINKING: { label: 'Sedang Berpikir', ring: 'border-sky-400/60', glow: 'bg-sky-400', headAnim: 'nexa-think', accent: 'text-sky-300' },
-  PROCESSING: { label: 'Sedang Memproses', ring: 'border-cyan-400/60', glow: 'bg-cyan-400', headAnim: '', accent: 'text-cyan-300' },
-  SUCCESS: { label: 'Perintah Berhasil', ring: 'border-emerald-400/60', glow: 'bg-emerald-400', headAnim: 'nexa-bounce', accent: 'text-emerald-300' },
-  ERROR: { label: 'Terjadi Kesalahan', ring: 'border-red-500/60', glow: 'bg-red-500', headAnim: 'nexa-shake', accent: 'text-red-300' },
-  READY: { label: 'Sedang Siaga', ring: 'border-sky-400/60', glow: 'bg-sky-400', headAnim: 'nexa-bob', accent: 'text-sky-300' },
-  SLEEPING: { label: 'Mode Malam/Tidur', ring: 'border-teal-400/40', glow: 'bg-teal-400', headAnim: '', accent: 'text-teal-300' },
+  IDLE: { label: 'Mode Standby', ring: 'border-teal-400/50', glow: 'bg-teal-400', accent: 'text-teal-300' },
+  LISTENING: { label: 'Sedang Mendengarkan', ring: 'border-cyan-400/60', glow: 'bg-cyan-400', accent: 'text-cyan-300' },
+  THINKING: { label: 'Sedang Berpikir', ring: 'border-sky-400/60', glow: 'bg-sky-400', accent: 'text-sky-300' },
+  PROCESSING: { label: 'Sedang Memproses', ring: 'border-cyan-400/60', glow: 'bg-cyan-400', accent: 'text-cyan-300' },
+  SUCCESS: { label: 'Perintah Berhasil', ring: 'border-emerald-400/60', glow: 'bg-emerald-400', accent: 'text-emerald-300' },
+  ERROR: { label: 'Terjadi Kesalahan', ring: 'border-red-500/60', glow: 'bg-red-500', accent: 'text-red-300' },
+  READY: { label: 'Sedang Siaga', ring: 'border-sky-400/60', glow: 'bg-sky-400', accent: 'text-sky-300' },
+  SLEEPING: { label: 'Mode Malam/Tidur', ring: 'border-teal-400/40', glow: 'bg-teal-400', accent: 'text-teal-300' },
 };
 
 export default function NexaRobot({ state, message, size = 'sm' }: NexaRobotProps) {
   const v = VISUALS[state] ?? VISUALS.IDLE;
 
   const face = (
-    <div className={`relative ${v.headAnim}`}>
+    <div className="relative">
       <div className={`absolute -inset-3 rounded-full ${v.glow} opacity-20 blur-lg`} />
       {badge(state)}
       <div
@@ -91,15 +89,15 @@ function eyes(state: NexaState): ReactNode {
     case 'LISTENING':
       return (
         <>
-          <span className="h-3 w-3 rounded-full bg-white ring-2 ring-cyan-300/50" />
-          <span className="h-3 w-3 rounded-full bg-white ring-2 ring-cyan-300/50" />
+          <span className="nexa-blink h-3 w-3 rounded-full bg-white ring-2 ring-cyan-300/50" />
+          <span className="nexa-blink h-3 w-3 rounded-full bg-white ring-2 ring-cyan-300/50" />
         </>
       );
     case 'THINKING':
       return (
         <>
-          <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-white" />
-          <span className="h-2.5 w-2.5 rounded-full bg-white" />
+          <span className="nexa-blink mt-1.5 h-2.5 w-2.5 rounded-full bg-white" />
+          <span className="nexa-blink h-2.5 w-2.5 rounded-full bg-white" />
         </>
       );
     case 'PROCESSING':
@@ -126,8 +124,8 @@ function eyes(state: NexaState): ReactNode {
     case 'READY':
       return (
         <>
-          <span className="h-2 w-3.5 rounded-full border-b-2 border-sky-200" />
-          <span className="h-2 w-3.5 rounded-full border-b-2 border-sky-200" />
+          <span className="nexa-blink h-2.5 w-2.5 rounded-full bg-sky-100" />
+          <span className="nexa-blink h-2.5 w-2.5 rounded-full bg-sky-100" />
         </>
       );
     case 'SLEEPING':
@@ -141,8 +139,8 @@ function eyes(state: NexaState): ReactNode {
     default:
       return (
         <>
-          <span className="h-2 w-3.5 rounded-full border-b-2 border-teal-200" />
-          <span className="h-2 w-3.5 rounded-full border-b-2 border-teal-200" />
+          <span className="nexa-blink h-3 w-3 rounded-full bg-white" />
+          <span className="nexa-blink h-3 w-3 rounded-full bg-white" />
         </>
       );
   }
@@ -177,13 +175,13 @@ function badge(state: NexaState): ReactNode {
   switch (state) {
     case 'SUCCESS':
       return (
-        <span className="nexa-pop absolute -top-6 left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-[0_0_14px_rgba(16,185,129,0.6)]">
+        <span className="absolute -top-6 left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-[0_0_14px_rgba(16,185,129,0.6)]">
           ✓
         </span>
       );
     case 'ERROR':
       return (
-        <span className="nexa-pop absolute -top-6 left-1/2 -translate-x-1/2 text-xl leading-none">
+        <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xl leading-none">
           ⚠️
         </span>
       );
