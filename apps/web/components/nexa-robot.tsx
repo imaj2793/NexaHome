@@ -17,8 +17,9 @@ interface RobotVisual {
 }
 
 /**
- * Visual robot Nexa (blueprint §15, §16, §40). Murni presentasional. Animasi
- * difokuskan pada mata (kedip + putaran saat loading), bukan gerakan badan.
+ * Visual robot Nexa (blueprint §15, §16, §40). Murni presentasional. Setiap
+ * state punya animasi khas (kedip, putaran, gelombang suara, zzz, dll) yang
+ * fokus pada mata/wajah — bukan gerakan badan (jump/zoom).
  */
 const VISUALS: Record<NexaState, RobotVisual> = {
   IDLE: { label: 'Mode Standby', ring: 'border-teal-400/50', glow: 'bg-teal-400', accent: 'text-teal-300' },
@@ -33,16 +34,22 @@ const VISUALS: Record<NexaState, RobotVisual> = {
 
 export default function NexaRobot({ state, message, size = 'sm' }: NexaRobotProps) {
   const v = VISUALS[state] ?? VISUALS.IDLE;
+  const breathe = state === 'IDLE' || state === 'SLEEPING';
+  const gaze = state === 'LISTENING' || state === 'THINKING';
 
   const face = (
     <div className="relative">
-      <div className={`absolute -inset-3 rounded-full ${v.glow} opacity-20 blur-lg`} />
+      <div
+        className={`absolute -inset-3 rounded-full ${v.glow} blur-lg ${breathe ? 'nexa-glow' : 'opacity-20'}`}
+      />
       {badge(state)}
       <div
         className={`relative flex h-24 w-24 flex-col items-center justify-center gap-2.5 rounded-[2rem] border-2 ${v.ring} bg-gradient-to-b from-slate-800 to-slate-950`}
       >
         {/* mata */}
-        <div className="flex items-center gap-3">{eyes(state)}</div>
+        <div className={`flex items-center gap-3 ${gaze ? 'nexa-gaze' : ''}`}>
+          {eyes(state)}
+        </div>
         {/* mulut */}
         {mouth(state)}
       </div>
@@ -110,15 +117,15 @@ function eyes(state: NexaState): ReactNode {
     case 'ERROR':
       return (
         <>
-          <span className="text-base font-bold leading-none text-red-400">✕</span>
-          <span className="text-base font-bold leading-none text-red-400">✕</span>
+          <span className="nexa-flash text-base font-bold leading-none text-red-400">✕</span>
+          <span className="nexa-flash text-base font-bold leading-none text-red-400">✕</span>
         </>
       );
     case 'SUCCESS':
       return (
         <>
-          <span className="h-2 w-3.5 rounded-full border-b-2 border-emerald-200" />
-          <span className="h-2 w-3.5 rounded-full border-b-2 border-emerald-200" />
+          <span className="nexa-squeeze h-2 w-3.5 rounded-full border-b-2 border-emerald-200" />
+          <span className="nexa-squeeze h-2 w-3.5 rounded-full border-b-2 border-emerald-200" />
         </>
       );
     case 'READY':
@@ -175,13 +182,13 @@ function badge(state: NexaState): ReactNode {
   switch (state) {
     case 'SUCCESS':
       return (
-        <span className="absolute -top-6 left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-[0_0_14px_rgba(16,185,129,0.6)]">
+        <span className="nexa-pulse-soft absolute -top-6 left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-[0_0_14px_rgba(16,185,129,0.6)]">
           ✓
         </span>
       );
     case 'ERROR':
       return (
-        <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xl leading-none">
+        <span className="nexa-pulse-soft absolute -top-6 left-1/2 -translate-x-1/2 text-xl leading-none">
           ⚠️
         </span>
       );
@@ -228,9 +235,11 @@ function badge(state: NexaState): ReactNode {
       );
     case 'SLEEPING':
       return (
-        <span className="nexa-float absolute -right-7 -top-1 text-sm font-bold text-teal-300">
-          z z z
-        </span>
+        <>
+          <span className="nexa-zzz absolute -right-3 -top-1 text-sm font-bold text-teal-300">z</span>
+          <span className="nexa-zzz absolute -right-2 -top-1 text-sm font-bold text-teal-300" style={{ animationDelay: '0.4s' }}>z</span>
+          <span className="nexa-zzz absolute -right-1 -top-1 text-sm font-bold text-teal-300" style={{ animationDelay: '0.8s' }}>z</span>
+        </>
       );
     default:
       return null;

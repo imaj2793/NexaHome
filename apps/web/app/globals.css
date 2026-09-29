@@ -9,7 +9,7 @@ body {
   color: #e2e8f0;
 }
 
-/* ── Nexa robot animations (fokus di mata) ─────────────── */
+/* ── Nexa robot animations (per ekspresi) ──────────────── */
 
 /* kedip mata */
 @keyframes nexa-blink {
@@ -24,7 +24,7 @@ body {
 }
 .nexa-spin { animation: nexa-spin 0.9s linear infinite; }
 
-/* elemen dekoratif melayang (?, z z z) */
+/* elemen dekoratif melayang (?) */
 @keyframes nexa-float {
   0%, 100% { transform: translateY(0); opacity: 0.85; }
   50% { transform: translateY(-6px); opacity: 1; }
@@ -44,6 +44,50 @@ body {
   50% { opacity: 1; }
 }
 .nexa-dot { animation: nexa-dot 1.2s ease-in-out infinite; }
+
+/* mata melirik kiri-kanan (mendengarkan / berpikir) */
+@keyframes nexa-gaze {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(2.5px); }
+  75% { transform: translateX(-2.5px); }
+}
+.nexa-gaze { animation: nexa-gaze 2.4s ease-in-out infinite; }
+
+/* mata lengkung merem-melek senang (berhasil) */
+@keyframes nexa-squeeze {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.55); }
+}
+.nexa-squeeze { animation: nexa-squeeze 1.6s ease-in-out infinite; transform-origin: center; }
+
+/* denyut lembut badge (checkmark / warning) */
+@keyframes nexa-pulse-soft {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+}
+.nexa-pulse-soft { animation: nexa-pulse-soft 1.4s ease-in-out infinite; }
+
+/* kilat mata X saat error */
+@keyframes nexa-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.nexa-flash { animation: nexa-flash 0.9s ease-in-out infinite; }
+
+/* zzz mengambang naik (tidur) */
+@keyframes nexa-zzz {
+  0% { transform: translateY(2px); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(-12px); opacity: 0; }
+}
+.nexa-zzz { animation: nexa-zzz 2.2s ease-in-out infinite; }
+
+/* napas / glow berdenyut (standby / tidur) */
+@keyframes nexa-glow {
+  0%, 100% { opacity: 0.14; }
+  50% { opacity: 0.34; }
+}
+.nexa-glow { animation: nexa-glow 3s ease-in-out infinite; }
 
 /* partikel background (login) */
 @keyframes nexa-particle {
