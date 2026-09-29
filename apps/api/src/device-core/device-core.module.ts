@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { IntegrationManager } from '@nexahome/device-core';
 import { WizAdapter } from '@nexahome/integration-wiz';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
+import { TasmotaAdapter } from '@nexahome/integration-tasmota';
 import { DeviceCoreService } from './device-core.service';
 import { DeviceGateway } from './device.gateway';
 
@@ -28,7 +29,16 @@ import { DeviceGateway } from './device.gateway';
           url: config.get<string>('MQTT_URL'),
         }),
     },
+    {
+      provide: TasmotaAdapter,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new TasmotaAdapter({
+          mode: (config.get<string>('TASMOTA_MODE') as 'mock' | 'http') ??
+            'mock',
+        }),
+    },
   ],
-  exports: [DeviceCoreService, DeviceGateway],
+  exports: [DeviceCoreService, DeviceGateway, IntegrationManager],
 })
 export class DeviceCoreModule {}

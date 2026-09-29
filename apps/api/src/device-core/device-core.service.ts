@@ -12,6 +12,7 @@ import {
 } from '@nexahome/device-core';
 import { WizAdapter } from '@nexahome/integration-wiz';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
+import { TasmotaAdapter } from '@nexahome/integration-tasmota';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeviceGateway } from './device.gateway';
 
@@ -44,19 +45,23 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
     private readonly manager: IntegrationManager,
     private readonly wiz: WizAdapter,
     private readonly mqtt: MqttAdapter,
+    private readonly tasmota: TasmotaAdapter,
     private readonly gateway: DeviceGateway,
   ) {}
 
   async onModuleInit(): Promise<void> {
     this.manager.register(this.wiz);
     this.manager.register(this.mqtt);
+    this.manager.register(this.tasmota);
     await this.wiz.connect();
     await this.mqtt.connect();
+    await this.tasmota.connect();
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.wiz.disconnect();
     await this.mqtt.disconnect();
+    await this.tasmota.disconnect();
   }
 
   async executeCommand(

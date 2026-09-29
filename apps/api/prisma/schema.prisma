@@ -23,6 +23,8 @@ enum IntegrationType {
   MQTT
   ESP32
   HOME_ASSISTANT
+  TASMOTA
+  SHELLY
 }
 
 enum NexaState {

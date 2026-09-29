@@ -1,0 +1,210 @@
+import {
+  DiscoveredDevice,
+  IntegrationAdapter,
+  IntegrationCommand,
+  IntegrationType,
+} from '@nexahome/device-core';
+
+export interface TasmotaAdapterConfig {
+  /** 'mock' = simulasi in-memory; 'http' = kontrol via HTTP API Tasmota. */
+  mode?: 'mock' | 'http';
+}
+
+interface MockDeviceSeed {
+  id: string;
+  name: string;
+  capabilities: string[];
+  state: Record<string, unknown>;
+}
+
+const DEFAULT_MOCK_DEVICES: MockDeviceSeed[] = [
+  {
+    id: 'tasmota_relay_01',
+    name: 'Tasmota Relay',
+    capabilities: ['power'],
+    state: { power: false },
+  },
+  {
+    id: 'tasmota_dimmer_01',
+    name: 'Tasmota Dimmer',
+    capabilities: ['power', 'brightness'],
+    state: { power: false, brightness: 70 },
+  },
+];
+
+const rgbToHex = (c: { r: number; g: number; b: number }): string =>
+  [c.r, c.g, c.b]
+    .map((n) =>
+      Math.max(0, Math.min(255, Math.round(n)))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')
+    .toUpperCase();
+
+const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
+  const m = /^#?([a-f\d]{6})$/i.exec(hex.trim());
+  if (!m) return { r: 255, g: 255, b: 255 };
+  const v = parseInt(m[1], 16);
+  return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+};
+
+/**
+ * Adapter Tasmota — firmware open-source untuk ESP32/ESP8266 (blueprint §8).
+ * Kontrol via HTTP API Tasmota: `GET http://<ip>/cm?cmnd=<command>`.
+ * Mode `mock` mensimulasikan perangkat in-memory untuk dev tanpa hardware.
+ *
+ * Perintah:
+ *   power       → `Power On/Off`
+ *   brightness  → `Dimmer <0-100>`
+ *   color       → `Color <RRGGBB>`
+ *   temperature → `CT <mireds>` (mireds = 1_000_000 / Kelvin)
+ */
+export class TasmotaAdapter implements IntegrationAdapter {
+  readonly type: IntegrationType = 'TASMOTA';
+  readonly vendor = 'tasmota';
+
+  private readonly mode: 'mock' | 'http';
+  private readonly mockState = new Map<string, Record<string, unknown>>();
+
+  constructor(config: TasmotaAdapterConfig = {}) {
+    this.mode = config.mode ?? 'mock';
+    if (this.mode === 'mock') this.seedMock();
+  }
+
+  async connect(): Promise<void> {}
+  async disconnect(): Promise<void> {}
+
+  async discoverDevices(): Promise<DiscoveredDevice[]> {
+    if (this.mode !== 'mock') {
+      // Discovery nyata via mDNS (_tasmota._tcp) ditangani DiscoveryService.
+      return [];
+    }
+    return [...this.mockState.entries()].map(([id, state]) => ({
+      id,
+      name: this.mockName(id),
+      type: 'switch',
+      capabilities: this.mockCaps(id),
+      state: { ...state },
+      vendor: this.vendor,
+    }));
+  }
+
+  async getDeviceState(deviceId: string): Promise<Record<string, unknown>> {
+    if (this.mode === 'mock') {
+      return { ...(this.mockState.get(deviceId) ?? {}) };
+    }
+    const status = await this.httpRequest(deviceId, 'Status%2011');
+    return this.statusToState(status);
+  }
+
+  async executeCommand(
+    deviceId: string,
+    command: IntegrationCommand,
+  ): Promise<Record<string, unknown>> {
+    if (this.mode === 'mock') {
+      return this.executeMock(deviceId, command);
+    }
+    await this.httpRequest(deviceId, encodeURIComponent(this.toCmnd(command)));
+    return this.commandToState(command);
+  }
+
+  // ── mode mock ──────────────────────────────────────────
+
+  private seedMock(): void {
+    for (const d of DEFAULT_MOCK_DEVICES) {
+      this.mockState.set(d.id, { ...d.state });
+    }
+  }
+
+  private mockName(id: string): string {
+    return (
+      DEFAULT_MOCK_DEVICES.find((d) => d.id === id)?.name ?? `Tasmota ${id}`
+    );
+  }
+
+  private mockCaps(id: string): string[] {
+    return (
+      DEFAULT_MOCK_DEVICES.find((d) => d.id === id)?.capabilities ?? ['power']
+    );
+  }
+
+  private executeMock(
+    deviceId: string,
+    command: IntegrationCommand,
+  ): Record<string, unknown> {
+    const current = this.mockState.get(deviceId) ?? {};
+    const next = this.commandToState(command);
+    this.mockState.set(deviceId, { ...current, ...next });
+    return { ...current, ...next };
+  }
+
+  // ── mode http ───────────────────────────────────────────
+
+  private toCmnd(command: IntegrationCommand): string {
+    switch (command.capability) {
+      case 'power':
+        return command.value ? 'Power On' : 'Power Off';
+      case 'brightness':
+        return `Dimmer ${command.value}`;
+      case 'color': {
+        const c = command.value as { r: number; g: number; b: number };
+        return `Color ${rgbToHex(c)}`;
+      }
+      case 'temperature': {
+        const kelvin = Number(command.value) || 3000;
+        return `CT ${Math.round(1_000_000 / kelvin)}`;
+      }
+      default:
+        return '';
+    }
+  }
+
+  private commandToState(
+    command: IntegrationCommand,
+  ): Record<string, unknown> {
+    const state: Record<string, unknown> = {};
+    switch (command.capability) {
+      case 'power':
+        state.power = command.value;
+        break;
+      case 'brightness':
+        state.brightness = command.value;
+        state.power = (command.value as number) > 0;
+        break;
+      case 'color':
+        state.color = command.value;
+        break;
+      case 'temperature':
+        state.temperature = command.value;
+        break;
+    }
+    return state;
+  }
+
+  private statusToState(status: unknown): Record<string, unknown> {
+    const raw = (status ?? {}) as Record<string, unknown>;
+    const sts = (raw.StatusSTS ?? raw) as Record<string, unknown>;
+    const state: Record<string, unknown> = { power: sts.Power === 'ON' };
+    if (typeof sts.Dimmer === 'number') state.brightness = sts.Dimmer;
+    if (typeof sts.Color === 'string' && sts.Color) {
+      state.color = hexToRgb(sts.Color);
+    }
+    if (typeof sts.CT === 'number' && sts.CT > 0) {
+      state.temperature = Math.round(1_000_000 / sts.CT);
+    }
+    return state;
+  }
+
+  private async httpRequest(
+    deviceId: string,
+    cmnd: string,
+  ): Promise<Record<string, unknown>> {
+    const url = `http://${deviceId}/cm?cmnd=${cmnd}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) {
+      throw new Error(`Tasmota HTTP ${res.status} dari ${deviceId}`);
+    }
+    return (await res.json()) as Record<string, unknown>;
+  }
+}
