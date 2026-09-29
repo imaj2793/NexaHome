@@ -384,6 +384,20 @@ Jalankan development server:
 pnpm dev
 ```
 
+### Instalasi Cepat dengan Docker
+
+Untuk mencoba NexaHome tanpa setup Node.js, jalankan seluruh stack dengan satu perintah:
+
+```bash
+cp .env.example .env
+# ganti JWT_SECRET dengan nilai acak:  openssl rand -hex 32
+docker compose up -d --build
+```
+
+Dashboard tersedia di http://localhost:3000, API di http://localhost:3001/api.
+Panduan lengkap (TLS, backup, upgrade, troubleshooting) ada di
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
 ### Layanan Lokal
 
 | Layanan | Alamat |
@@ -440,7 +454,12 @@ NexaHome/
 | --- | --- |
 | [`docs/PRD.md`](docs/PRD.md) | Visi produk, kebutuhan, dan definisi fitur |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Tahapan pengembangan dan roadmap rilis |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Panduan setup dan kontribusi |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Panduan setup dan kontribusi teknis |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Deployment produksi dengan Docker Compose |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Cara berkontribusi dan konvensi |
+| [`SECURITY.md`](SECURITY.md) | Cara melapor kerentanan |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Peraturan interaksi komunitas |
+| [`CHANGELOG.md`](CHANGELOG.md) | Riwayat perubahan versi |
 | [`docs/API.md`](docs/API.md) | Referensi endpoint API |
 | [`BLUEPRINT.md`](BLUEPRINT.md) | Arsitektur dan desain teknis |
 | [`IDEA.md`](IDEA.md) | Konsep awal NexaHome |
@@ -513,8 +532,10 @@ docs: update development guide
 Sebelum commit:
 
 ```bash
-pnpm run typecheck
-pnpm run build
+pnpm lint        # ESLint
+pnpm typecheck   # tsc --noEmit
+pnpm test        # Vitest (API + web)
+pnpm build       # production build
 ```
 
 ---

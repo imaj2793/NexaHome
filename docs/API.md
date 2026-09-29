@@ -94,9 +94,23 @@ Base URL: `http://localhost:3001/api` · Semua endpoint (kecuali `register`/`log
 
 | Method | Path | Body | Keterangan |
 | --- | --- | --- | --- |
-| POST | `/nexa/chat` | `{ message }` | chat → `{ message, state, tool? }` |
+| POST | `/nexa/chat` | `{ message }` | chat → `{ message, state, tool?, degraded? }` |
+| GET | `/nexa/status` | — | kemampuan Nexa → `{ aiProvider, llm, tts, stt, degraded }` |
 | POST | `/nexa/transcribe` | `{ audio }` (base64) | STT → `{ text }` |
 | POST | `/nexa/speech` | `{ text }` | TTS → audio/mpeg |
+
+**Mode terbatas (degradation).** Nexa tidak pernah menggantung saat ada fitur
+yang belum siap:
+
+| Situasi | Respon |
+| --- | --- |
+| LLM gagal / timeout | `200` dengan `state: "ERROR"`, `degraded: "llm_unavailable"`, pesan ramah; detail provider hanya di log server |
+| Tool gagal dieksekusi | `state: "ERROR"`, `degraded: "tool_failed"` |
+| STT belum dikonfigurasi atau whisper gagal | `503` pada `/nexa/transcribe` dengan pesan yang sarankan beralih ke input teks |
+| TTS gagal | `503` pada `/nexa/speech`; client jatuh ke `speechSynthesis` browser |
+
+`GET /nexa/status` dipakai UI untuk menampilkan mode terbatas sejak awal
+(mic dinonaktifkan bila `stt.configured === false`) alih-alih menunggu error.
 
 ## Lainnya
 

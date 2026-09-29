@@ -49,19 +49,27 @@ NexaHome dianggap siap distribusi bila:
 
 ## Fase C — Voice penuh (fitur flagship)
 
-1. [ ] Uji **DeepSeek live** (isi `AI_API_KEY`, `AI_PROVIDER=deepseek`) — pastikan loop tool-calling multi-langkah jalan ("nyalakan lampu kamar" = get_devices → turn_on).
-2. [ ] Pasang **whisper.cpp + model ggml** di box target (i3 Gen11/12GB).
-3. [ ] Uji end-to-end: STT → LLM → tool → TTS, target **< 5 detik**.
-4. [ ] Fallback bila STT/LLM gagal (jawaban teks + state ERROR, tidak hang).
+1. [ ] Uji **DeepSeek live** (isi `AI_API_KEY`, `AI_PROVIDER=deepseek`) — pastikan loop tool-calling multi-langkah jalan ("nyalakan lampu kamar" = get_devices → turn_on). *Menunggu API key pengguna.*
+2. [ ] Pasang **whisper.cpp + model ggml** di box target (i3 Gen11/12GB). *Menunggu akses ke box target.*
+3. [ ] Uji end-to-end: STT → LLM → tool → TTS, target **< 5 detik**. *Tergantung butir 1 & 2.*
+4. [x] Fallback bila STT/LLM gagal (jawaban teks + state ERROR, tidak hang) —
+   `GET /api/nexa/status` melaporkan mode terbatas, error chat dibalas dengan
+   `degraded` tanpa membocorkan pesan provider, dan STT/TTS yang tidak siap
+   membalas `503` dengan saran beralih ke input teks.
 
 ---
 
 ## Fase D — Onboarding universal (Phase 10)
 
-1. [ ] Selesaikan **mDNS/SSDP** discovery (sudah ada kerangka di `discovery.service.ts`).
-2. [ ] **Register + test integrasi Tasmota** (3 langkah: adapter → factory provider di `device-core.module.ts` → `register()` di `DeviceCoreService`).
-3. [ ] **BLE** — riset → implement (target onboarding via Bluetooth).
-4. [ ] Polish onboarding manual (form nama/tipe/IP/MAC).
+1. [~] **mDNS discovery** selesai di `discovery.service.ts` (bonjour-service:
+   ESPHome, Tasmota, Shelly, HomeKit) + digabung dengan `discoverAll()` adapter
+   dan didedupe — ter-cover `discovery.service.spec.ts`. **SSDP/UPnP** belum
+   diimplementasikan (memerlukan perangkat nyata di LAN untuk diuji).
+2. [x] **Register + test integrasi Tasmota** (3 langkah: adapter → factory provider di `device-core.module.ts` → `register()` di `DeviceCoreService`) — ter-cover test `device-core.spec.ts` & `adapters.spec.ts`.
+3. [~] **BLE** — ditunda (keputusan pengguna): perangkat BLE dipasangkan manual
+   lewat form onboarding, bukan via discovery otomatis.
+4. [x] Polish onboarding manual (form nama/tipe/IP-MAC, validasi nama, pesan
+   error, pilihan ruangan) — ter-cover `add-device-modal.spec.tsx`.
 
 ---
 
@@ -76,18 +84,24 @@ NexaHome dianggap siap distribusi bila:
 
 ## Fase F — CI/CD & Release
 
-1. [ ] **GitHub Actions**: lint + `typecheck` + `test` + `build` di tiap PR.
-2. [ ] **Semver + CHANGELOG** (commit conventional sudah ada).
-3. [ ] **GitHub Releases** + tag otomatis.
-4. [ ] Dependabot untuk update dependency.
+1. [x] **GitHub Actions**: lint + `typecheck` + `test` + `build` di tiap PR
+   (`.github/workflows/ci.yml`, plus build image Docker & `pnpm audit --prod`).
+2. [x] **Semver + CHANGELOG** (commit conventional sudah ada) — `CHANGELOG.md`
+   berbasis Keep a Changelog.
+3. [x] **GitHub Releases** + tag otomatis — `release.yml` (tag `v*` → image GHCR +
+   GitHub Release).
+4. [x] Dependabot untuk update dependency (`.github/dependabot.yml`, mingguan,
+   dikelompokkan per framework).
 
 ---
 
 ## Fase G — Legal & Governance
 
 1. [x] Pilih & tambah **LICENSE** — **MIT** (permissive, selaras visi "bebas dikembangkan komunitas").
-2. [ ] `CONTRIBUTING.md` — cara setup, struktur, konvensi.
-3. [ ] `CODE_OF_CONDUCT.md` + `SECURITY.md` (cara lapor bug keamanan).
+2. [x] `CONTRIBUTING.md` — cara setup, struktur, konvensi.
+3. [x] `CODE_OF_CONDUCT.md` + `SECURITY.md` (cara lapor bug keamanan).
+4. [x] `docs/DEPLOYMENT.md` — deployment Docker Compose, TLS, backup, troubleshooting.
+5. [x] `CHANGELOG.md` + tautan dokumen di `README.md`.
 
 ---
 
@@ -103,10 +117,14 @@ NexaHome dianggap siap distribusi bila:
 
 ## Fase I — Dokumentasi & Konsistensi
 
-1. [ ] Samakan status antar dokumen: **PRD** (Phase 8 ✅) vs **README** (masih 🚧) vs **BLUEPRINT** (state robot masih 10, padahal 8).
-2. [ ] Sinkronkan enum `NexaState` di schema Prisma (10 nilai) dengan union UI/type (8 nilai).
-3. [ ] Finalisasi `docs/API.md` (tambah endpoint `discovery`, `transcribe`).
-4. [ ] Screenshot/demo GIF untuk README.
+1. [x] Status antar dokumen seragam: **PRD**, **README**, dan **ROADMAP** kini memakai
+   penanda yang sama (✅ selesai · 🚧 berjalan · 🔬 riset · ⏳ menunggu lingkungan).
+2. [x] Enum `NexaState` di schema Prisma disinkronkan ke 8 state kanonik
+   (migration `20260929194500_align_nexa_state_enum`; enum tidak dipakai kolom
+   apa pun sehingga tidak ada data yang hilang).
+3. [x] `docs/API.md` final: endpoint `discovery`, `transcribe`, plus tabel
+   `GET /nexa/status` & perilaku degradation.
+4. [ ] Screenshot/demo GIF untuk README (butuh aset visual, tidak bisa digenerate otomatis).
 
 ---
 

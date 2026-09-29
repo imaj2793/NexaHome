@@ -1,6 +1,6 @@
 # NexaHome — Product Requirements Document (PRD)
 
-> Versi: 1.0 · Status: **live (Phase 1–8 selesai)** · Pemilik: twilight
+> Versi: 1.1 · Status: **live (Phase 1–8 selesai, Phase 9–10 berjalan)** · Pemilik: twilight
 
 ---
 
@@ -121,8 +121,8 @@ User buka "Tambah Perangkat"
 | 6 — IoT | MQTT integration | ✅ |
 | 7 — Advanced | notifications, energy monitoring | ✅ |
 | 8 — v1.0 | dokumentasi, security hardening | ✅ |
-| **9 — Voice penuh** | DeepSeek live + STT lokal + wake word | 🚧 (kode siap, tunggu API key) |
-| **10 — Onboarding universal** | mDNS/SSDP + Bluetooth | 🔬 riset |
+| **9 — Voice penuh** | DeepSeek live + STT lokal + wake word | 🚧 (kode siap, fallback & mode terbatas selesai; tunggu API key + whisper di box target) |
+| **10 — Onboarding universal** | mDNS + SSDP + Bluetooth | 🚧 mDNS selesai & teruji; SSDP & BLE (ditunda → pairing manual) belum |
 
 ---
 
