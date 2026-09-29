@@ -16,15 +16,30 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, transform: true }),
   );
 
+  // Di belakang reverse proxy (nginx/traefik), aktifkan trust proxy agar
+  // rate limiting melihat IP klien sebenarnya (set TRUST_PROXY=1).
+  if (config.get<string>('TRUST_PROXY') === '1') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
+
   const corsOrigin = config.get<string>('CORS_ORIGIN');
+  const origins = corsOrigin
+    ? corsOrigin
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
+    : [];
   app.enableCors({
-    origin: corsOrigin ? corsOrigin.split(',') : true,
+    // Di produksi hanya origin terdaftar (validasi env menjamin CORS_ORIGIN ada);
+    // di dev tanpa konfigurasi, izinkan request same-origin/tool.
+    origin: origins.length > 0 ? origins : true,
     credentials: true,
   });
 
-  const port = config.get<number>('API_PORT') ?? 3001;
+  // Nilai env selalu string; `app.listen("3001")` akan diperlakukan Node
+  // sebagai nama pipe UNIX, bukan port. Parse eksplisit dengan fallback.
+  const port = Number.parseInt(config.get<string>('API_PORT') ?? '', 10) || 3001;
   await app.listen(port);
-  // eslint-disable-next-line no-console
   console.log(`🚀 NexaHome API ready at http://localhost:${port}/api`);
 }
 

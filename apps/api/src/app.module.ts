@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from './common/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { DeviceCoreModule } from './device-core/device-core.module';
 import { AuthModule } from './auth/auth.module';
@@ -18,7 +19,7 @@ import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     PrismaModule,
     DeviceCoreModule,
     AuthModule,
