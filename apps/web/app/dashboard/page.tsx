@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -39,7 +40,7 @@ export default function DashboardPage() {
       const [roomsRes, devicesRes, logsRes] = await Promise.all([
         api<ApiRoom[]>(`/rooms?homeId=${h.id}`),
         api<ApiDevice[]>(`/devices?homeId=${h.id}`),
-        api<ApiActivityLog[]>(`/activity-log?homeId=${h.id}&limit=10`),
+        api<ApiActivityLog[]>(`/activity-log?homeId=${h.id}&limit=50`),
       ]);
       setRooms(roomsRes);
       setDevices(devicesRes);
@@ -74,6 +75,16 @@ export default function DashboardPage() {
       socket.disconnect();
     };
   }, []);
+
+  // Tutup modal riwayat dengan Escape.
+  useEffect(() => {
+    if (!showHistory) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowHistory(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showHistory]);
 
   async function toggleDevice(device: ApiDevice) {
     const state = device.state as { power?: boolean };
@@ -126,10 +137,22 @@ export default function DashboardPage() {
               NexaHome
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <span className="hidden text-sm text-slate-400 sm:block">
               {user?.email ?? ''}
             </span>
+            <button
+              onClick={() => setShowHistory(true)}
+              title="Riwayat aktivitas"
+              aria-label="Riwayat aktivitas"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M12 7v5l4 2" />
+              </svg>
+            </button>
             <button
               onClick={logout}
               className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800"
@@ -233,30 +256,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Recent activity */}
-            <div className="mt-8">
-              <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
-                Recent Activity
-              </h3>
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60">
-                {logs.map((l) => (
-                  <div
-                    key={l.id}
-                    className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-sm last:border-0"
-                  >
-                    <span>{l.message}</span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(l.createdAt).toLocaleTimeString('id-ID')}
-                    </span>
-                  </div>
-                ))}
-                {!logs.length && (
-                  <p className="px-4 py-3 text-sm text-slate-500">
-                    Belum ada aktivitas.
-                  </p>
-                )}
-              </div>
-            </div>
           </>
           )}
           </div>
@@ -266,6 +265,47 @@ export default function DashboardPage() {
           </aside>
         </div>
       </div>
+
+      {showHistory && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          onClick={() => setShowHistory(false)}
+        >
+          <div
+            className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+              <h3 className="font-semibold tracking-tight">Riwayat Aktivitas</h3>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                aria-label="Tutup"
+              >
+                ✕
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {logs.map((l) => (
+                <div
+                  key={l.id}
+                  className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-3 text-sm last:border-0"
+                >
+                  <span className="text-slate-200">{l.message}</span>
+                  <span className="shrink-0 text-xs text-slate-500">
+                    {new Date(l.createdAt).toLocaleTimeString('id-ID')}
+                  </span>
+                </div>
+              ))}
+              {!logs.length && (
+                <p className="px-5 py-6 text-center text-sm text-slate-500">
+                  Belum ada aktivitas.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
