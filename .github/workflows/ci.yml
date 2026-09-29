@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  # Container test memakai database sungguhan (service postgres di bawah).
+  DATABASE_URL: postgresql://nexahome:nexahome@localhost:5432/nexahome?schema=public
+
+jobs:
+  verify:
+    name: typecheck + test + build
+    runs-on: ubuntu-latest
+    # Prisma butuh OpenSSL; image runner ubuntu sudah menyediakannya.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexahome
+          POSTGRES_PASSWORD: nexahome
+          POSTGRES_DB: nexahome
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexahome -d nexahome"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependensi
+        run: pnpm install --frozen-lockfile
+
+      - name: Siapkan database
+        run: |
+          pnpm db:generate
+          pnpm --filter @nexahome/api exec prisma migrate deploy
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Audit dependency produksi
+        run: pnpm audit --prod
+
+  docker:
+    name: build image docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: runner
+          push: false
+          load: true
+          tags: nexahome/api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build image Web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          load: true
+          tags: nexahome/web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Ukuran image
+        run: docker images "nexahome/*:ci" --format "{{.Repository}} {{.Size}}"

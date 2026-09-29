@@ -1,0 +1,52 @@
+version: 2
+updates:
+  - package-ecosystem: "pnpm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Produktivitas + toolchain
+      dev-dependencies:
+        patterns:
+          - "turbo"
+          - "typescript"
+          - "vitest"
+          - "@vitest/*"
+          - "@swc/*"
+          - "unplugin-swc"
+          - "@nestjs/cli"
+          - "@nestjs/schematics"
+          - "@types/*"
+      # Framework & runtime API
+      nestjs:
+        patterns:
+          - "@nestjs/*"
+      # Framework web
+      nextjs:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "tailwindcss"
+          - "@tailwindcss/*"
+      # Lapisan data
+      prisma:
+        patterns:
+          - "prisma"
+          - "@prisma/*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Asia/Jakarta"
+    commit-message:
+      prefix: "ci"

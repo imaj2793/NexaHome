@@ -151,7 +151,6 @@ async function main() {
     },
   });
 
-  // eslint-disable-next-line no-console
   console.log(
     `✅ Seed selesai. Login: ${user.email} / password123 (home: ${home.name})`,
   );
@@ -159,7 +158,6 @@ async function main() {
 
 main()
   .catch((e) => {
-    // eslint-disable-next-line no-console
     console.error(e);
     process.exit(1);
   })
