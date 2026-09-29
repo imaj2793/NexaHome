@@ -4,6 +4,7 @@ import {
   IntegrationAdapter,
   IntegrationCommand,
   IntegrationType,
+  parseMode,
 } from '@nexahome/device-core';
 
 /** Konfigurasi adapter MQTT. */
@@ -14,9 +15,14 @@ export interface MqttAdapterConfig {
   url?: string;
 }
 
+/** Mode yang didukung adapter MQTT. */
+type MqttMode = 'mock' | 'mqtt';
+
+const MQTT_MODES: readonly MqttMode[] = ['mock', 'mqtt'];
+
 /** Bentuk konfigurasi setelah dinormalisasi oleh constructor. */
 interface ResolvedConfig {
-  mode: 'mock' | 'mqtt';
+  mode: MqttMode;
   url?: string;
 }
 
@@ -85,7 +91,10 @@ export class MqttAdapter implements IntegrationAdapter {
   >();
 
   constructor(config: MqttAdapterConfig = {}) {
-    this.config = { mode: config.mode ?? 'mock', url: config.url };
+    // Nilai mode berasal dari env, jadi divalidasi agar salah ketik
+    // (mis. "live") tidak membuat adapter diam-diam jadi no-op.
+    const mode = parseMode<MqttMode>(config.mode, MQTT_MODES, 'mock', 'MQTT_MODE');
+    this.config = { mode, url: config.url };
     if (this.config.mode === 'mqtt' && !this.config.url) {
       throw new Error(
         'Mode "mqtt" memerlukan `url` broker (mis. mqtt://localhost:1883).',

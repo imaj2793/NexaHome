@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
@@ -40,6 +41,8 @@ export interface CommandResult {
  */
 @Injectable()
 export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(DeviceCoreService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly manager: IntegrationManager,
@@ -53,9 +56,27 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
     this.manager.register(this.wiz);
     this.manager.register(this.mqtt);
     this.manager.register(this.tasmota);
-    await this.wiz.connect();
-    await this.mqtt.connect();
-    await this.tasmota.connect();
+    // Integrasi yang gagal connect (mis. broker MQTT mati) tidak boleh
+    // menggagalkan boot API: perangkat dari integrasi lain harus tetap
+    // bisa dipakai, dan client mqtt.js otomatis mencoba reconnect.
+    await this.connectSafely('WiZ', this.wiz);
+    await this.connectSafely('MQTT', this.mqtt);
+    await this.connectSafely('Tasmota', this.tasmota);
+  }
+
+  private async connectSafely(
+    name: string,
+    adapter: { connect: () => Promise<void> },
+  ): Promise<void> {
+    try {
+      await adapter.connect();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Integrasi ${name} gagal connect: ${message}. ` +
+          'API tetap jalan; integrasi lain tetap bisa dipakai.',
+      );
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

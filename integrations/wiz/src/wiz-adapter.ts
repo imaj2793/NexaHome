@@ -4,13 +4,19 @@ import {
   IntegrationAdapter,
   IntegrationCommand,
   IntegrationType,
+  parseMode,
 } from '@nexahome/device-core';
 
 const WIZ_PORT = 38899;
 
+/** Mode yang didukung adapter WiZ. */
+type WizMode = 'mock' | 'udp';
+
+const WIZ_MODES: readonly WizMode[] = ['mock', 'udp'];
+
 export interface WizAdapterConfig {
   /** 'mock' = simulasi in-memory (dev tanpa bulb fisik); 'udp' = protokol asli. */
-  mode: 'mock' | 'udp';
+  mode: WizMode;
   broadcastAddress?: string;
   port?: number;
 }
@@ -62,8 +68,10 @@ export class WizAdapter implements IntegrationAdapter {
   private readonly ipByMac = new Map<string, string>();
 
   constructor(config: WizAdapterConfig = { mode: 'mock' }) {
+    // Nilai mode berasal dari env, jadi divalidasi agar salah ketik
+    // (mis. "live") tidak membuat adapter diam-diam jadi no-op.
     this.config = {
-      mode: config.mode ?? 'mock',
+      mode: parseMode<WizMode>(config.mode, WIZ_MODES, 'mock', 'WIZ_MODE'),
       broadcastAddress: config.broadcastAddress ?? '255.255.255.255',
       port: config.port ?? WIZ_PORT,
     };

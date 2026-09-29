@@ -3,11 +3,17 @@ import {
   IntegrationAdapter,
   IntegrationCommand,
   IntegrationType,
+  parseMode,
 } from '@nexahome/device-core';
+
+/** Mode yang didukung adapter Tasmota. */
+type TasmotaMode = 'mock' | 'http';
+
+const TASMOTA_MODES: readonly TasmotaMode[] = ['mock', 'http'];
 
 export interface TasmotaAdapterConfig {
   /** 'mock' = simulasi in-memory; 'http' = kontrol via HTTP API Tasmota. */
-  mode?: 'mock' | 'http';
+  mode?: TasmotaMode;
 }
 
 interface MockDeviceSeed {
@@ -68,7 +74,14 @@ export class TasmotaAdapter implements IntegrationAdapter {
   private readonly mockState = new Map<string, Record<string, unknown>>();
 
   constructor(config: TasmotaAdapterConfig = {}) {
-    this.mode = config.mode ?? 'mock';
+    // Nilai mode berasal dari env, jadi divalidasi agar salah ketik
+    // (mis. "live") tidak membuat adapter diam-diam jadi no-op.
+    this.mode = parseMode<TasmotaMode>(
+      config.mode,
+      TASMOTA_MODES,
+      'mock',
+      'TASMOTA_MODE',
+    );
     if (this.mode === 'mock') this.seedMock();
   }
 
