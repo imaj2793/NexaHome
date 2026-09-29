@@ -55,6 +55,7 @@ export class DevicesService {
         homeId: dto.homeId,
         roomId: dto.roomId ?? null,
         integrationId: dto.integrationId ?? null,
+        externalId: dto.externalId ?? null,
         capabilities: dto.capabilities ?? [],
         state: (dto.state ?? {}) as object,
       },

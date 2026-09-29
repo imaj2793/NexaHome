@@ -30,9 +30,29 @@ export interface ApiDevice {
   type: string;
   homeId: string;
   roomId: string | null;
+  integrationId: string | null;
+  externalId: string | null;
   capabilities: string[];
   state: Record<string, unknown>;
   room: { id: string; name: string } | null;
+  integration?: { id: string; name: string } | null;
+}
+
+export interface ApiIntegration {
+  id: string;
+  name: string;
+  type: string;
+  homeId: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+}
+
+export interface DiscoveredDevice {
+  id: string;
+  name: string;
+  type: string;
+  capabilities: string[];
+  state: Record<string, unknown>;
 }
 
 export interface ApiActivityLog {

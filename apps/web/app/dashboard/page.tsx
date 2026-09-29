@@ -9,12 +9,15 @@ import {
   type ApiAutomation,
   type ApiDevice,
   type ApiHome,
+  type ApiIntegration,
   type ApiRoom,
   type ApiScene,
 } from '@/lib/api';
 import { clearSession, getToken, getUser } from '@/lib/auth';
 import { connectSocket, type DeviceStateEvent } from '@/lib/socket';
 import NexaChat from '@/components/nexa-chat';
+import DeviceCard from '@/components/device-card';
+import AddDeviceModal from '@/components/add-device-modal';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -24,7 +27,11 @@ export default function DashboardPage() {
   const [logs, setLogs] = useState<ApiActivityLog[]>([]);
   const [scenes, setScenes] = useState<ApiScene[]>([]);
   const [automations, setAutomations] = useState<ApiAutomation[]>([]);
+  const [integrations, setIntegrations] = useState<ApiIntegration[]>([]);
   const [busyScene, setBusyScene] = useState<string | null>(null);
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [addingRoom, setAddingRoom] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -40,23 +47,32 @@ export default function DashboardPage() {
         setLogs([]);
         setScenes([]);
         setAutomations([]);
+        setIntegrations([]);
         return;
       }
       const h = homes[0];
       setHome(h);
-      const [roomsRes, devicesRes, logsRes, scenesRes, automationsRes] =
-        await Promise.all([
-          api<ApiRoom[]>(`/rooms?homeId=${h.id}`),
-          api<ApiDevice[]>(`/devices?homeId=${h.id}`),
-          api<ApiActivityLog[]>(`/activity-log?homeId=${h.id}&limit=50`),
-          api<ApiScene[]>(`/scenes?homeId=${h.id}`),
-          api<ApiAutomation[]>(`/automations?homeId=${h.id}`),
-        ]);
+      const [
+        roomsRes,
+        devicesRes,
+        logsRes,
+        scenesRes,
+        automationsRes,
+        integrationsRes,
+      ] = await Promise.all([
+        api<ApiRoom[]>(`/rooms?homeId=${h.id}`),
+        api<ApiDevice[]>(`/devices?homeId=${h.id}`),
+        api<ApiActivityLog[]>(`/activity-log?homeId=${h.id}&limit=50`),
+        api<ApiScene[]>(`/scenes?homeId=${h.id}`),
+        api<ApiAutomation[]>(`/automations?homeId=${h.id}`),
+        api<ApiIntegration[]>(`/integrations?homeId=${h.id}`),
+      ]);
       setRooms(roomsRes);
       setDevices(devicesRes);
       setLogs(logsRes);
       setScenes(scenesRes);
       setAutomations(automationsRes);
+      setIntegrations(integrationsRes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat data.');
     } finally {
@@ -98,23 +114,54 @@ export default function DashboardPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [showHistory]);
 
-  async function toggleDevice(device: ApiDevice) {
-    const state = device.state as { power?: boolean };
-    const action = state.power ? 'turn_off' : 'turn_on';
+  async function sendCommand(
+    device: ApiDevice,
+    action: string,
+    value?: unknown,
+  ) {
     setBusyId(device.id);
     try {
       const res = await api<{ state: Record<string, unknown> }>(
         `/devices/${device.id}/commands`,
-        { method: 'POST', body: JSON.stringify({ action }) },
+        { method: 'POST', body: JSON.stringify({ action, value }) },
       );
       setDevices((prev) =>
         prev.map((d) => (d.id === device.id ? { ...d, state: res.state } : d)),
       );
-      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal mengubah perangkat.');
     } finally {
       setBusyId(null);
+    }
+  }
+
+  function toggleDevice(device: ApiDevice) {
+    const state = device.state as { power?: boolean };
+    return sendCommand(device, state.power ? 'turn_off' : 'turn_on');
+  }
+
+  async function deleteDevice(device: ApiDevice) {
+    try {
+      await api(`/devices/${device.id}`, { method: 'DELETE' });
+      setDevices((prev) => prev.filter((d) => d.id !== device.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menghapus perangkat.');
+    }
+  }
+
+  async function addRoom() {
+    const name = newRoomName.trim();
+    if (!name || !home) return;
+    try {
+      await api('/rooms', {
+        method: 'POST',
+        body: JSON.stringify({ name, homeId: home.id }),
+      });
+      setNewRoomName('');
+      setAddingRoom(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menambah ruangan.');
     }
   }
 
@@ -203,7 +250,8 @@ export default function DashboardPage() {
           {home ? home.name : 'Dashboard'}
         </h2>
         <p className="mt-1 text-sm text-slate-400">
-          Good evening — kendalikan rumahmu dari satu tempat.
+          Kendalikan rumahmu dari satu tempat — atau bilang{' '}
+          <span className="text-indigo-400">&quot;Hi Nexa&quot;</span>.
         </p>
 
         {error && (
@@ -249,10 +297,18 @@ export default function DashboardPage() {
 
             {/* Rooms */}
             <div className="mt-8">
-              <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
-                Rooms
-              </h3>
-              <div className="flex flex-wrap gap-2">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-medium uppercase tracking-wide text-slate-400">
+                  Rooms
+                </h3>
+                <button
+                  onClick={() => setAddingRoom(true)}
+                  className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 transition hover:bg-slate-800"
+                >
+                  + Ruangan
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 {rooms.map((r) => (
                   <span
                     key={r.id}
@@ -261,19 +317,58 @@ export default function DashboardPage() {
                     {r.name}
                   </span>
                 ))}
-                {!rooms.length && (
+                {addingRoom && (
+                  <input
+                    autoFocus
+                    value={newRoomName}
+                    onChange={(e) => setNewRoomName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') addRoom();
+                      if (e.key === 'Escape') {
+                        setAddingRoom(false);
+                        setNewRoomName('');
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!newRoomName.trim()) setAddingRoom(false);
+                    }}
+                    placeholder="Nama ruangan…"
+                    className="w-40 rounded-full border border-indigo-500 bg-slate-950 px-3 py-1 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
+                  />
+                )}
+                {!rooms.length && !addingRoom && (
                   <span className="text-sm text-slate-500">
                     Belum ada ruangan.
                   </span>
                 )}
               </div>
+              {integrations.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {integrations.map((i) => (
+                    <span
+                      key={i.id}
+                      className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs text-slate-500"
+                    >
+                      {i.name} · {i.type}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Devices */}
             <div className="mt-8">
-              <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
-                Devices
-              </h3>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-medium uppercase tracking-wide text-slate-400">
+                  Devices
+                </h3>
+                <button
+                  onClick={() => setShowAddDevice(true)}
+                  className="rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-1.5 text-xs font-medium text-white transition hover:from-indigo-500 hover:to-cyan-500"
+                >
+                  + Tambah Perangkat
+                </button>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {devices.map((d) => (
                   <DeviceCard
@@ -281,6 +376,9 @@ export default function DashboardPage() {
                     device={d}
                     busy={busyId === d.id}
                     onToggle={() => toggleDevice(d)}
+                    onBrightness={(v) => sendCommand(d, 'set_brightness', v)}
+                    onColor={(rgb) => sendCommand(d, 'set_color', rgb)}
+                    onDelete={() => deleteDevice(d)}
                   />
                 ))}
                 {!devices.length && (
@@ -413,62 +511,19 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-    </main>
-  );
-}
 
-function DeviceCard({
-  device,
-  busy,
-  onToggle,
-}: {
-  device: ApiDevice;
-  busy: boolean;
-  onToggle: () => void;
-}) {
-  const state = device.state as {
-    power?: boolean;
-    brightness?: number;
-  };
-  const isLight = device.type === 'light';
-  const powered = state.power === true;
-
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 transition hover:border-slate-700">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="font-medium">{device.name}</div>
-          <div className="mt-0.5 text-xs capitalize text-slate-400">
-            {device.room ? device.room.name : 'Tanpa ruangan'} · {device.type}
-          </div>
-        </div>
-        <button
-          onClick={onToggle}
-          disabled={busy}
-          className={`h-10 w-10 rounded-full text-lg transition ${
-            powered
-              ? 'bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 shadow-[0_0_16px_rgba(251,191,36,0.35)]'
-              : 'bg-slate-800 text-slate-400'
-          } disabled:opacity-50`}
-          aria-label={powered ? 'Matikan' : 'Nyalakan'}
-        >
-          💡
-        </button>
-      </div>
-
-      {isLight && (
-        <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-          <span className="text-slate-500">
-            {powered ? 'Menyala' : 'Mati'}
-          </span>
-          {powered && typeof state.brightness === 'number' && (
-            <>
-              <span className="text-slate-600">·</span>
-              <span>Kecerahan {state.brightness}%</span>
-            </>
-          )}
-        </div>
+      {showAddDevice && home && (
+        <AddDeviceModal
+          homeId={home.id}
+          integrations={integrations}
+          rooms={rooms}
+          onClose={() => setShowAddDevice(false)}
+          onAdded={() => {
+            setShowAddDevice(false);
+            load();
+          }}
+        />
       )}
-    </div>
+    </main>
   );
 }

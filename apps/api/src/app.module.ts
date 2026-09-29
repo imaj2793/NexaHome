@@ -11,6 +11,7 @@ import { ScenesModule } from './scenes/scenes.module';
 import { AutomationModule } from './automation/automation.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { EnergyModule } from './energy/energy.module';
+import { DiscoveryModule } from './discovery/discovery.module';
 import { NexaModule } from './nexa/nexa.module';
 import { ActivityLogModule } from './activity-log/activity-log.module';
 import { HealthModule } from './health/health.module';
@@ -29,6 +30,7 @@ import { HealthModule } from './health/health.module';
     AutomationModule,
     NotificationsModule,
     EnergyModule,
+    DiscoveryModule,
     NexaModule,
     ActivityLogModule,
     HealthModule,

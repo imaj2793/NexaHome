@@ -24,6 +24,10 @@ export class CreateDeviceDto {
   integrationId?: string | null;
 
   @IsOptional()
+  @IsString()
+  externalId?: string | null;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   capabilities?: string[];

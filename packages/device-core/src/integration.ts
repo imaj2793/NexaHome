@@ -6,7 +6,9 @@ export type IntegrationType =
   | 'WIZ'
   | 'MQTT'
   | 'ESP32'
-  | 'HOME_ASSISTANT';
+  | 'HOME_ASSISTANT'
+  | 'TASMOTA'
+  | 'SHELLY';
 
 /** Perintah yang dieksekusi terhadap sebuah perangkat (capability + value). */
 export interface IntegrationCommand {
@@ -21,6 +23,8 @@ export interface DiscoveredDevice {
   type: string;
   capabilities: string[];
   state: Record<string, unknown>;
+  /** Vendor/protokol (mis. 'wiz', 'tasmota', 'shelly') — untuk routing universal. */
+  vendor?: string;
 }
 
 /**

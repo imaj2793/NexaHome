@@ -47,4 +47,17 @@ export class IntegrationManager {
     }
     return adapter.discoverDevices();
   }
+
+  /** Discovery gabungan dari SEMUA integration yang terdaftar. */
+  async discoverAll(): Promise<DiscoveredDevice[]> {
+    const results: DiscoveredDevice[] = [];
+    for (const adapter of this.adapters.values()) {
+      try {
+        results.push(...(await adapter.discoverDevices()));
+      } catch {
+        // lewati adapter yang gagal — satu adapter down tak boleh gagalkan scan.
+      }
+    }
+    return results;
+  }
 }
