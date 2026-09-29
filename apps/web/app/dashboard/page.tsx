@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
   api,
+  logout as logoutApi,
   type ApiActivityLog,
   type ApiAutomation,
   type ApiDevice,
@@ -13,7 +14,7 @@ import {
   type ApiRoom,
   type ApiScene,
 } from '@/lib/api';
-import { clearSession, getToken, getUser } from '@/lib/auth';
+import { getToken, getUser } from '@/lib/auth';
 import { connectSocket, type DeviceStateEvent } from '@/lib/socket';
 import NexaChat from '@/components/nexa-chat';
 import DeviceCard from '@/components/device-card';
@@ -165,8 +166,8 @@ export default function DashboardPage() {
     }
   }
 
-  function logout() {
-    clearSession();
+  async function logout() {
+    await logoutApi();
     router.replace('/login');
   }
 

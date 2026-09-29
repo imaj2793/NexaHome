@@ -28,5 +28,16 @@ export type RegisterInput = z.infer<typeof RegisterInputSchema>;
 
 export interface AuthResponse {
   accessToken: string;
+  /** Refresh token (opaque, disimpan sebagai hash SHA-256 di server). */
+  refreshToken: string;
   user: AuthUser;
+}
+
+export const RefreshInputSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+export type RefreshInput = z.infer<typeof RefreshInputSchema>;
+
+export interface LogoutResponse {
+  success: boolean;
 }

@@ -9,6 +9,7 @@ import NexaBackground from '@/components/nexa-background';
 
 interface AuthResponse {
   accessToken: string;
+  refreshToken: string;
   user: ApiUser;
 }
 
@@ -30,7 +31,7 @@ export default function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      setSession(res.accessToken, res.user);
+      setSession(res.accessToken, res.refreshToken, res.user);
       router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login gagal.');
