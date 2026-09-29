@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { sendNexaMessage, speakNexa, type NexaState } from '@/lib/nexa';
+import {
+  sendNexaMessage,
+  speakNexa,
+  stripWakeWord,
+  transcribeAudio,
+  type NexaState,
+} from '@/lib/nexa';
 import { connectSocket } from '@/lib/socket';
 import NexaRobot from '@/components/nexa-robot';
 import NexaRobotView from '@/components/nexa-robot-view';
@@ -28,7 +34,10 @@ export default function NexaChat() {
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<NexaState | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [recording, setRecording] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   // Scroll ke bawah setiap kali daftar pesan berubah.
   useEffect(() => {
@@ -68,6 +77,94 @@ export default function NexaChat() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Gagal menghubungi Nexa.';
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId++, role: 'error', text: `⚠️ ${message}` },
+      ]);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () =>
+        resolve((reader.result as string).split(',')[1] ?? '');
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = handleVoiceResult;
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+      setStatus('LISTENING');
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId++,
+          role: 'error',
+          text: '⚠️ Mikrofon tidak tersedia atau izin ditolak.',
+        },
+      ]);
+    }
+  }
+
+  function stopRecording() {
+    recorderRef.current?.stop();
+    recorderRef.current?.stream
+      ?.getTracks()
+      .forEach((track) => track.stop());
+    setRecording(false);
+  }
+
+  async function handleVoiceResult() {
+    const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+    chunksRef.current = [];
+    if (blob.size === 0) return;
+
+    setPending(true);
+    try {
+      const base64 = await blobToBase64(blob);
+      const rawText = await transcribeAudio(base64);
+      const text = stripWakeWord(rawText);
+      if (!text) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nextId++,
+            role: 'nexa',
+            text: 'Aku tidak menangkap perintahmu. Coba lagi ya.',
+          },
+        ]);
+        setStatus('IDLE');
+        return;
+      }
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId++, role: 'user', text: rawText },
+      ]);
+      const res = await sendNexaMessage(text);
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId++, role: 'nexa', text: res.message },
+      ]);
+      setStatus(res.state);
+      speakNexa(res.message);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Gagal memproses suara.';
       setMessages((prev) => [
         ...prev,
         { id: nextId++, role: 'error', text: `⚠️ ${message}` },
@@ -149,6 +246,24 @@ export default function NexaChat() {
           placeholder="Tanya Nexa…"
           className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
         />
+        <button
+          type="button"
+          onClick={recording ? stopRecording : startRecording}
+          disabled={pending}
+          title={
+            recording
+              ? 'Berhenti merekam'
+              : 'Mulai bicara — ucapkan "Hi Nexa"'
+          }
+          aria-label={recording ? 'Berhenti merekam' : 'Mulai bicara'}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-base transition disabled:opacity-50 ${
+            recording
+              ? 'animate-pulse border-red-500 bg-red-500/20 text-red-300'
+              : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-500/50 hover:text-cyan-300'
+          }`}
+        >
+          {recording ? '■' : '🎤'}
+        </button>
         <button
           type="submit"
           disabled={pending || !input.trim()}

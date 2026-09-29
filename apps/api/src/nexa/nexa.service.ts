@@ -14,6 +14,7 @@ const SYSTEM_PROMPT = [
   'Kamu adalah Nexa, asisten smart home NexaHome yang ramah dan ringkas.',
   'Kamu mengendalikan perangkat rumah lewat tool yang tersedia.',
   'Selalu pakai tool untuk menyalakan, mematikan, atau mengubah perangkat.',
+  'Boleh memanggil beberapa tool berurutan (mis. get_devices untuk tahu ID, lalu turn_on_device).',
   'Jawab dalam Bahasa Indonesia, singkat dan jelas.',
 ].join(' ');
 
@@ -43,7 +44,8 @@ export class NexaService {
   private aiConfig() {
     return {
       apiKey: this.config.get<string>('AI_API_KEY') ?? '',
-      model: this.config.get<string>('AI_MODEL') ?? 'gpt-4o-mini',
+      baseUrl: this.config.get<string>('AI_BASE_URL'),
+      model: this.config.get<string>('AI_MODEL') ?? 'deepseek-chat',
     };
   }
 
@@ -72,40 +74,59 @@ export class NexaService {
         { role: 'user', content: message },
       ];
 
-      const response = await provider.chat({
-        messages,
-        tools: this.tools.getToolDefinitions(),
-      });
+      let lastTool: { name: string; success: boolean } | undefined;
+      const maxIterations = 4;
 
-      const assistant = response.message;
+      // Tool-calling multi-turn: eksekusi tool → kirim hasil ke LLM → ulangi
+      // sampai LLM memberi jawaban final (tanpa tool_call lagi).
+      for (let i = 0; i < maxIterations; i++) {
+        const response = await provider.chat({
+          messages,
+          tools: this.tools.getToolDefinitions(),
+        });
+        const assistant = response.message;
+        messages.push(assistant);
 
-      // Tool calling: eksekusi tool pertama (satu iterasi untuk MVP).
-      if (assistant.tool_calls && assistant.tool_calls.length > 0) {
-        const call = assistant.tool_calls[0];
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(call.function.arguments || '{}');
-        } catch {
-          args = {};
+        const calls = assistant.tool_calls ?? [];
+        if (calls.length === 0) {
+          const result: NexaChatResult = {
+            message:
+              assistant.content || 'Maaf, saya tidak bisa menjawab itu.',
+            state: lastTool && !lastTool.success ? 'ERROR' : 'SUCCESS',
+            ...(lastTool ? { tool: lastTool } : {}),
+          };
+          this.gateway.emitNexaState('', result.state, result.message);
+          return result;
         }
 
         this.gateway.emitNexaState('', 'PROCESSING');
-        const exec = await this.tools.execute(call.function.name, args, {
-          userId,
-        });
+        for (const call of calls) {
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(call.function.arguments || '{}');
+          } catch {
+            args = {};
+          }
 
-        const result: NexaChatResult = {
-          message: exec.success ? exec.message : `Maaf, ${exec.message}`,
-          state: exec.success ? 'SUCCESS' : 'ERROR',
-          tool: { name: call.function.name, success: exec.success },
-        };
-        this.gateway.emitNexaState('', result.state, result.message);
-        return result;
+          const exec = await this.tools.execute(call.function.name, args, {
+            userId,
+          });
+          lastTool = { name: call.function.name, success: exec.success };
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify(exec),
+          });
+        }
       }
 
       const result: NexaChatResult = {
-        message: assistant.content || 'Maaf, saya tidak bisa menjawab itu.',
-        state: 'SUCCESS',
+        message: lastTool?.success
+          ? 'Selesai.'
+          : 'Maaf, perintah belum selesai diproses.',
+        state: lastTool && !lastTool.success ? 'ERROR' : 'SUCCESS',
+        ...(lastTool ? { tool: lastTool } : {}),
       };
       this.gateway.emitNexaState('', result.state, result.message);
       return result;

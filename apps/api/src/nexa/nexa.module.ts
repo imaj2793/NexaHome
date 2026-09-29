@@ -6,10 +6,11 @@ import { EnergyModule } from '../energy/energy.module';
 import { NexaController } from './nexa.controller';
 import { NexaService } from './nexa.service';
 import { NexaToolsService } from './nexa-tools.service';
+import { SttService } from './stt.service';
 
 @Module({
   imports: [DeviceCoreModule, ScenesModule, AutomationModule, EnergyModule],
   controllers: [NexaController],
-  providers: [NexaService, NexaToolsService],
+  providers: [NexaService, NexaToolsService, SttService],
 })
 export class NexaModule {}

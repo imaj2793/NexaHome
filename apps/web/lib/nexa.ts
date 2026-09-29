@@ -73,3 +73,18 @@ function browserSpeak(text: string): void {
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utter);
 }
+
+/** Transkripsi audio (base64 WebM/Opus) via STT lokal di backend. */
+export function transcribeAudio(audioBase64: string): Promise<string> {
+  return api<{ text: string }>('/nexa/transcribe', {
+    method: 'POST',
+    body: JSON.stringify({ audio: audioBase64 }),
+  }).then((r) => r.text);
+}
+
+/** Buang kata panggil "Hi/Hai Nexa" di awal transkrip (wake word). */
+export function stripWakeWord(text: string): string {
+  return text
+    .replace(/^\s*(hi|hai|hey|hei|halo)\s+nexa\b[,.!?\s]*/i, '')
+    .trim();
+}

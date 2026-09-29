@@ -29,3 +29,4 @@ apps/api/prisma/generated/
 
 # typescript
 *.tsbuildinfo
+models/
