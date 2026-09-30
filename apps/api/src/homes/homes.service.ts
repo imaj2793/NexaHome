@@ -12,7 +12,6 @@ export interface HomeMemberView {
   userId: string;
   email: string;
   name: string | null;
-  role: string;
   createdAt: Date;
 }
 
@@ -26,7 +25,7 @@ export class HomesService {
       where: accessibleHomeFilter(ownerId),
       include: {
         _count: { select: { rooms: true, devices: true } },
-        members: { select: { userId: true, role: true } },
+        members: { select: { userId: true } },
       },
     });
   }
@@ -71,7 +70,6 @@ export class HomesService {
       userId: m.userId,
       email: m.user.email,
       name: m.user.name,
-      role: m.role,
       createdAt: m.createdAt,
     }));
   }

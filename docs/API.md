@@ -55,7 +55,7 @@ semuanya diterjemahkan ke kode di atas.
 | PATCH | `/homes/:id` | ubah |
 | DELETE | `/homes/:id` | hapus (owner) |
 | GET | `/homes/:id/members` | daftar anggota rumah |
-| POST | `/homes/:id/members` | tambah anggota (owner) — body `{ "email": "…", "role"?: "USER\|ADMIN" }` |
+| POST | `/homes/:id/members` | tambah anggota (owner) — body `{ "email": "…" }`. Tidak ada parameter `role`: anggota punya kontrol penuh |
 | DELETE | `/homes/:id/members/:memberId` | keluarkan anggota (owner) |
 
 ## Rooms

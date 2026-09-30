@@ -96,11 +96,13 @@ model Home {
   updatedAt    DateTime      @updatedAt
 }
 
+// Tidak ada kolom role: anggota rumah punya kontrol penuh atas device, room,
+// dan command. Kolom `role` pernah ada tapi tidak pernah dibaca kode, jadi
+// hanya menyesatkan (lihat docs/authentication.md §2).
 model HomeMember {
   id        String   @id @default(cuid())
   homeId    String
   userId    String
-  role      Role     @default(USER)
   home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

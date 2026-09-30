@@ -47,7 +47,7 @@ describe('HomesService', () => {
       where: accessibleHomeFilter('usr_1'),
       include: {
         _count: { select: { rooms: true, devices: true } },
-        members: { select: { userId: true, role: true } },
+        members: { select: { userId: true } },
       },
     });
     expect(res).toEqual([homeRow]);
@@ -143,7 +143,6 @@ describe('HomesService — anggota rumah', () => {
     id: 'mem_1',
     homeId: 'home_1',
     userId: 'usr_2',
-    role: 'USER',
     createdAt: new Date('2026-01-01'),
     user: { id: 'usr_2', email: 'anggota@x.local', name: 'Anggota' },
     ...over,
@@ -199,8 +198,7 @@ describe('HomesService — anggota rumah', () => {
           userId: 'usr_2',
           email: 'anggota@x.local',
           name: 'Anggota',
-          role: 'USER',
-          createdAt: new Date('2026-01-01'),
+                createdAt: new Date('2026-01-01'),
         },
       ]);
       // Tidak boleh membocorkan hash password atau field user lain.

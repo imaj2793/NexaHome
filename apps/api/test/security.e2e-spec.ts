@@ -484,6 +484,78 @@ const stamp = Date.now();
       expect(JSON.stringify(found)).not.toContain(secretPassword);
     });
 
+    it('anggota rumah punya kontrol penuh atas device dan room', async () => {
+      // Keputusan produk: anggota = kontrol penuh. Test ini mengunci pilihan
+      // itu, termasuk bagian yang harus berubah. Kalau nanti ada granularitas
+      // role, test ini yang harus diperbarui lebih dulu — bukan dibiarkan
+      // gagal diam-diam.
+      const memberEmail = `penuh-${stamp}@nexahome.test`;
+      const memberAuth = { Authorization: await register(memberEmail) };
+      await request(http)
+        .post(`/api/homes/${homeId}/members`)
+        .set(owner)
+        .send({ email: memberEmail })
+        .expect(201);
+
+      // Boleh membuat device dan room.
+      const room = await request(http)
+        .post('/api/rooms')
+        .set(memberAuth)
+        .send({ name: 'Kamar Anggota', homeId })
+        .expect(201);
+
+      const device = await request(http)
+        .post('/api/devices')
+        .set(memberAuth)
+        .send({
+          name: 'Lampu Anggota',
+          type: 'light',
+          homeId,
+          roomId: room.body.id,
+          capabilities: ['power'],
+          state: { power: false },
+        })
+        .expect(201);
+
+      // Boleh mengubah dan menjalankan.
+      await request(http)
+        .patch(`/api/devices/${device.body.id}`)
+        .set(memberAuth)
+        .send({ name: 'Lampu Anggota (Diretas)' })
+        .expect(200);
+      const command = await request(http)
+        .post(`/api/devices/${device.body.id}/commands`)
+        .set(memberAuth)
+        .send({ action: 'turn_on' })
+        .expect(201);
+      expect(command.body.state.power).toBe(true);
+
+      // Boleh menghapus.
+      await request(http).delete(`/api/devices/${device.body.id}`).set(memberAuth).expect(200);
+
+      // Tapi tidak boleh menyentuh anggota lain, integrasi, maupun rumah itu
+      // sendiri. Semuanya 404, sama seperti sumber daya milik rumah orang
+      // lain: 403 akan mengonfirmasi bahwa sumber daya itu ada.
+      await request(http)
+        .post(`/api/homes/${homeId}/members`)
+        .set(memberAuth)
+        .send({ email: otherEmail })
+        .expect(404);
+      await request(http)
+        .patch(`/api/integrations/${integrationId}`)
+        .set(memberAuth)
+        .send({ enabled: false })
+        .expect(404);
+      const renamed = await request(http)
+        .patch(`/api/homes/${homeId}`)
+        .set(memberAuth)
+        .send({ name: 'Rumah Diambil' })
+        .expect(404);
+      expect(renamed.body.error.code).toBe('NOT_FOUND');
+
+      await prisma.user.delete({ where: { email: memberEmail } });
+    });
+
     it('kredensial tidak bocor lewat error maupun respons lain', async () => {
       // Endpoint yang menyentuh integrasi: list, discover, dan patch.
       const discover = await request(http)

@@ -38,6 +38,28 @@ Hanya pemilik (owner):
 Anggota rumah bisa membaca dan menjalankan perangkat, tapi tidak bisa
 menambah anggota lain atau mengubah integrasi.
 
+### Keputusan: anggota punya kontrol penuh
+
+Anggota rumah mendapat hak yang sama dengan pemilik atas isi rumah:
+membuat, mengubah, dan menghapus device serta room, dan mengirim command ke
+device mana pun di rumah itu. `HomeMember` tidak punya kolom `role` — kolom
+itu pernah ada (default `USER`) tapi tidak pernah dibaca kode, jadi hanya
+menyesatkan.
+
+Konsekuensinya, dan ini yang perlu disadari:
+
+- Satu anggota yang tokennya bocor bisa menghapus semua device dan room
+  rumah tersebut. Yang tetap terbatas hanya operasi di daftar "hanya pemilik"
+  di atas, termasuk seluruh kredensial integrasi.
+- Tidak ada granularitas antara dua anggota: tidak ada yang bisa "hanya
+  boleh menyalakan lampu".
+- Kalau ini jadi tidak neoliberal, langkah berikutnya adalah menambah
+  `HomeMember.role` dan membedakannya di `DevicesService`/`RoomsService`,
+  bukan setengah-setengah.
+
+`User.role` (default `OWNER`) punya masalah serupa dan belum disentuh: tidak
+ada kode yang membacanya.
+
 ## 3. Model user
 
 Satu user bisa punya banyak rumah lewat `HomeMember`. Setiap `Home` punya satu
@@ -105,8 +127,9 @@ Tidak ada route `GET /integrations/:id`; integrasi hanya bisa dibaca lewat
   token lama yang dicabut masih diterima sampai kedaluwarsa.
 - Rate limiting belum ada di API maupun WebSocket handshake.
 - Password reset / verifikasi email belum ada.
-- Role `ADMIN` di `HomeMemberRole` ada, tapi belum ada operasi yang
-  membedakannya dari `USER`. Saat ini keanggotaan bersifat ya/tidak.
+- Granularitas antar anggota belum ada: semua anggota punya kontrol penuh atas
+  device dan room (lihat §2). Kolom `HomeMember.role` sudah dihapus karena
+  tidak pernah dipakai.
 
 ## 7. Referensi kode
 
