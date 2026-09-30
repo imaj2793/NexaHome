@@ -31,3 +31,7 @@ apps/api/prisma/generated/
 # typescript
 *.tsbuildinfo
 models/
+
+# python cache dari tool CLI
+__pycache__/
+*.pyc
