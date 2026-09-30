@@ -1,0 +1,33 @@
+# NexaHome — pakai image rilis dari GHCR (tanpa build lokal).
+#
+# Untuk server yang hanya menjalankan NexaHome (tidak mengembangkan kode):
+#
+#   cp .env.example .env      # ganti JWT_SECRET
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+#
+# Catatan:
+#   - `build: !reset null` membatalkan build lokal sehingga image dari GHCR dipakai
+#     (butuh Docker Compose v2.24+; cek dengan `docker compose version`).
+#   - Image web sudah di-build dengan NEXT_PUBLIC_API_URL default
+#     (http://localhost:3001/api). Untuk domain sendiri, pakai reverse proxy
+#     di host yang sama (lihat docs/DEPLOYMENT.md §7) atau build image sendiri
+#     karena NEXT_PUBLIC_* di-inline saat build.
+#   - Paket GHCR dibuat private secara default. Kalau paketnya diubah menjadi
+#     Public, image bisa ditarik tanpa login. Untuk paket private:
+#     docker login ghcr.io -u <user> -p <token>
+#
+# Untuk menentukan versi, ganti NEXAHOME_VERSION di bawah (mis. 0.2.0).
+
+services:
+  migrate:
+    image: ghcr.io/${NEXAHOME_REPO:-imaj2793/nexahome}/api-migrate:${NEXAHOME_VERSION:-latest}
+    build: !reset null
+
+  api:
+    image: ghcr.io/${NEXAHOME_REPO:-imaj2793/nexahome}/api:${NEXAHOME_VERSION:-latest}
+    build: !reset null
+
+  web:
+    image: ghcr.io/${NEXAHOME_REPO:-imaj2793/nexahome}/web:${NEXAHOME_VERSION:-latest}
+    build: !reset null

@@ -65,6 +65,48 @@ docker compose logs -f migrate
 
 ---
 
+## 3b. Deploy dari image rilis (tanpa build lokal)
+
+Setiap tag GitHub (`v*`) memublikasikan tiga image ke GitHub Container Registry
+lewat `.github/workflows/release.yml`:
+
+| Image | Isi |
+| --- | --- |
+| `ghcr.io/imaj2793/nexahome/api` | API (target `runner`) |
+| `ghcr.io/imaj2793/nexahome/api-migrate` | one-shot `prisma migrate deploy` |
+| `ghcr.io/imaj2793/nexahome/web` | Dashboard Next.js |
+
+Server yang hanya menjalankan NexaHome tidak perlu Node.js, pnpm, atau Docker
+BuildKit — cukup menarik image yang sudah jadi:
+
+```bash
+git clone https://github.com/imaj2793/NexaHome.git
+cd NexaHome
+cp .env.example .env
+# ganti JWT_SECRET, lalu tentukan versi yang diinginkan:
+echo 'NEXAHOME_VERSION=0.2.0' >> .env
+
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+```
+
+Override `docker-compose.ghcr.yml` mengganti definition `build` dengan `!reset null`,
+sehingga Compose tidak pernah membangun image secara lokal. Butuh Docker Compose
+v2.24+ (cek dengan `docker compose version`).
+
+Catatan:
+
+- Paket GHCR dibuat **private** secara default. Agar bisa di-pull tanpa login,
+  ubah visibility package menjadi Public di GitHub, atau jalankan
+  `docker login ghcr.io -u <user> -p <token>`.
+- `NEXT_PUBLIC_API_URL` di-inline saat build, jadi image web memakai default
+  `http://localhost:3001/api`. Untuk domain sendiri, andalkan reverse proxy di
+  host yang sama (§7) atau build image sendiri dengan `docker compose up --build`.
+- Untuk tetap membangun dari sumber (kontrol penuh atas versi dan URL API),
+  gunakan `docker compose up -d --build` seperti di §3.
+
+---
+
 ## 4. Verifikasi
 
 ```bash
@@ -112,7 +154,7 @@ produksi.
 | `AI_PROVIDER` | tidak | `mock` | `mock`, `deepseek`, atau `openai` (butuh `AI_API_KEY`) |
 | `WHISPER_BIN` / `WHISPER_MODEL` | tidak | kosong | whisper.cpp lokal; kosong = STT nonaktif |
 | `MQTT_MODE` | tidak | `mqtt` (compose) | Di compose nilainya `mqtt`; untuk simulasi tanpa broker tambahkan `docker-compose.override.yml` |
-| `TASMOTA_MODE` / `WIZ_MODE` | tidak | `mock` (compose) | `http` / `udp` butuh akses ke jaringan LAN tempat perangkat berada |
+| `TASMOTA_MODE` | tidak | `mock` (compose) | `http` butuh akses ke jaringan LAN tempat perangkat berada |
 
 Mode yang tidak dikenal membuat API gagal start dengan pesan jelas — ini disengaja
 agar kesalahan konfigurasi ketahuan cepat, bukan diam-diam menjadi no-op.
