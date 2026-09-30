@@ -329,7 +329,11 @@ describe('humanizeCommand', () => {
     expect(humanizeCommand('Lampu', 'set_brightness', 60)).toBe(
       'Lampu kecerahan 60%.',
     );
-    expect(humanizeCommand('Lampu', 'set_temperature', 3000)).toBe(
+    // AC = derajat Celsius, lampu = Kelvin. Keduanya aksi terpisah (§4).
+    expect(humanizeCommand('AC', 'set_temperature', 24)).toBe(
+      'AC disetel ke 24°C.',
+    );
+    expect(humanizeCommand('Lampu', 'set_color_temperature', 3000)).toBe(
       'Lampu suhu warna 3000K.',
     );
   });
@@ -577,9 +581,12 @@ describe('DeviceCoreService', () => {
       type: 'SHELLY',
       enabled: true,
     });
+    // Kegagalan adapter dipetakan ke kontrak error §13, bukan error mentah.
     await expect(
       service.executeCommand(deviceExternal, 'turn_on'),
-    ).rejects.toThrow('Tidak ada integration untuk tipe "SHELLY".');
+    ).rejects.toMatchObject({
+      code: 'INTEGRATION_NOT_AVAILABLE',
+    });
 
     expect(prisma.device.update).not.toHaveBeenCalled();
     expect(gateway.emitDeviceState).not.toHaveBeenCalled();

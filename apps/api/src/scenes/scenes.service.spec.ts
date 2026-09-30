@@ -1,3 +1,4 @@
+import { accessibleHomeFilter, accessibleHomeWhere } from '../homes/home-access';
 import { NotFoundException } from '@nestjs/common';
 import { ScenesService } from './scenes.service';
 import type { DeviceCoreService } from '../device-core/device-core.service';
@@ -17,7 +18,7 @@ const makePrisma = () => ({
 
 const makeDeviceCore = () => ({ executeCommand: vi.fn() });
 
-const homeRow = { id: 'home_1', ownerId: 'usr_1' };
+const homeRow = accessibleHomeWhere('usr_1', 'home_1');
 const sceneRow = {
   id: 'scene_1',
   name: 'Mode Malam',
@@ -62,7 +63,7 @@ describe('ScenesService', () => {
       const res = await service.list('usr_1');
 
       expect(prisma.scene.findMany).toHaveBeenCalledWith({
-        where: { home: { ownerId: 'usr_1' } },
+        where: { home: accessibleHomeFilter('usr_1') },
         include: { actions: true },
         orderBy: { createdAt: 'asc' },
       });
@@ -76,10 +77,10 @@ describe('ScenesService', () => {
       await service.list('usr_1', 'home_1');
 
       expect(prisma.home.findFirst).toHaveBeenCalledWith({
-        where: { id: 'home_1', ownerId: 'usr_1' },
+        where: accessibleHomeWhere('usr_1', 'home_1'),
       });
       expect(prisma.scene.findMany).toHaveBeenCalledWith({
-        where: { home: { ownerId: 'usr_1' }, homeId: 'home_1' },
+        where: { home: accessibleHomeFilter('usr_1'), homeId: 'home_1' },
         include: { actions: true },
         orderBy: { createdAt: 'asc' },
       });
@@ -102,7 +103,7 @@ describe('ScenesService', () => {
       const res = await service.get('usr_1', 'scene_1');
 
       expect(prisma.scene.findFirst).toHaveBeenCalledWith({
-        where: { id: 'scene_1', home: { ownerId: 'usr_1' } },
+        where: { id: 'scene_1', home: accessibleHomeFilter('usr_1') },
         include: { actions: true },
       });
       expect(res.actions).toHaveLength(1);
@@ -193,7 +194,7 @@ describe('ScenesService', () => {
       await service.update('usr_1', 'scene_1', { homeId: 'home_1' });
 
       expect(prisma.home.findFirst).toHaveBeenCalledWith({
-        where: { id: 'home_1', ownerId: 'usr_1' },
+        where: accessibleHomeWhere('usr_1', 'home_1'),
       });
       expect(prisma.scene.update).toHaveBeenCalledWith({
         where: { id: 'scene_1' },

@@ -1,3 +1,4 @@
+import { accessibleHomeFilter, accessibleHomeWhere } from '../homes/home-access';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DevicesService } from './devices.service';
 import type { DeviceCoreService } from '../device-core/device-core.service';
@@ -18,7 +19,7 @@ const makeDeviceCore = () => ({
   executeCommand: vi.fn(),
 });
 
-const homeRow = { id: 'home_1', ownerId: 'usr_1' };
+const homeRow = accessibleHomeWhere('usr_1', 'home_1');
 const deviceRow = {
   id: 'dev_1',
   name: 'Lampu Meja',
@@ -60,24 +61,38 @@ describe('DevicesService', () => {
 
       expect(prisma.home.findFirst).not.toHaveBeenCalled();
       expect(prisma.device.findMany).toHaveBeenCalledWith({
-        where: { home: { ownerId: 'usr_1' } },
+        where: { home: accessibleHomeFilter('usr_1') },
         include: { room: true, integration: true },
         orderBy: { createdAt: 'asc' },
       });
       expect(res).toEqual([deviceRow]);
     });
 
-    it('memverifikasi kepemilikan home saat homeId diberikan', async () => {
+    it('menyertakan rumah yang dianggotai, bukan hanya milik sendiri', async () => {
+    // Otorisasi memakai filter keanggotaan, jadi anggota non-owner tetap bisa
+    // membaca devices rumah itu.
+    await service.findAll('usr_member');
+
+    const [args] = prisma.device.findMany.mock.calls[0];
+    expect(args.where.home).toEqual({
+      OR: [
+        { ownerId: 'usr_member' },
+        { members: { some: { userId: 'usr_member' } } },
+      ],
+    });
+  });
+
+  it('memverifikasi kepemilikan home saat homeId diberikan', async () => {
       prisma.home.findFirst.mockResolvedValue(homeRow as never);
       prisma.device.findMany.mockResolvedValue([] as never);
 
       await service.findAll('usr_1', 'home_1');
 
       expect(prisma.home.findFirst).toHaveBeenCalledWith({
-        where: { id: 'home_1', ownerId: 'usr_1' },
+        where: accessibleHomeWhere('usr_1', 'home_1'),
       });
       expect(prisma.device.findMany).toHaveBeenCalledWith({
-        where: { home: { ownerId: 'usr_1' }, homeId: 'home_1' },
+        where: { home: accessibleHomeFilter('usr_1'), homeId: 'home_1' },
         include: { room: true, integration: true },
         orderBy: { createdAt: 'asc' },
       });
@@ -91,7 +106,7 @@ describe('DevicesService', () => {
 
       expect(prisma.device.findMany).toHaveBeenCalledWith({
         where: {
-          home: { ownerId: 'usr_1' },
+          home: accessibleHomeFilter('usr_1'),
           homeId: 'home_1',
           roomId: 'room_1',
         },
@@ -117,7 +132,7 @@ describe('DevicesService', () => {
       const res = await service.findOne('usr_1', 'dev_1');
 
       expect(prisma.device.findFirst).toHaveBeenCalledWith({
-        where: { id: 'dev_1', home: { ownerId: 'usr_1' } },
+        where: { id: 'dev_1', home: accessibleHomeFilter('usr_1') },
         include: { room: true, integration: true },
       });
       expect(res.id).toBe('dev_1');
@@ -273,7 +288,7 @@ describe('DevicesService', () => {
       });
 
       expect(prisma.device.findFirst).toHaveBeenCalledWith({
-        where: { id: 'dev_1', home: { ownerId: 'usr_1' } },
+        where: { id: 'dev_1', home: accessibleHomeFilter('usr_1') },
         include: { integration: true },
       });
       expect(deviceCore.executeCommand).toHaveBeenCalledWith(

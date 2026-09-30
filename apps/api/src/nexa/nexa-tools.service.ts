@@ -147,6 +147,22 @@ export class NexaToolsService {
         },
       },
       {
+        name: 'set_color_temperature',
+        description:
+          'Atur suhu warna lampu (dalam Kelvin, mis. 2700 hangat s/d 6500 dingin).',
+        parameters: {
+          type: 'object',
+          properties: {
+            device_id: { type: 'string', description: 'ID perangkat' },
+            value: {
+              type: 'number',
+              description: 'Suhu warna target (Kelvin)',
+            },
+          },
+          required: ['device_id', 'value'],
+        },
+      },
+      {
         name: 'get_room_status',
         description: 'Status ruangan beserta daftar perangkatnya.',
         parameters: {
@@ -222,6 +238,8 @@ export class NexaToolsService {
           return await this.runDeviceCommand(args, ctx, 'set_color');
         case 'set_temperature':
           return await this.runDeviceCommand(args, ctx, 'set_temperature');
+        case 'set_color_temperature':
+          return await this.runDeviceCommand(args, ctx, 'set_color_temperature');
         case 'get_room_status':
           return await this.getRoomStatus(args, ctx);
         case 'activate_scene':
@@ -293,7 +311,13 @@ export class NexaToolsService {
   private async runDeviceCommand(
     args: Record<string, unknown>,
     ctx: NexaToolContext,
-    action: 'turn_on' | 'turn_off' | 'set_brightness' | 'set_color' | 'set_temperature',
+    action:
+      | 'turn_on'
+      | 'turn_off'
+      | 'set_brightness'
+      | 'set_color'
+      | 'set_temperature'
+      | 'set_color_temperature',
   ): Promise<NexaToolResult> {
     const deviceId = this.requireString(args.device_id);
     if (deviceId === null) {
@@ -312,6 +336,12 @@ export class NexaToolsService {
       const v = this.requireFiniteNumber(args.value);
       if (v === null) {
         return this.invalidArg('value harus berupa angka.');
+      }
+      value = v;
+    } else if (action === 'set_color_temperature') {
+      const v = this.requireNumberInRange(args.value, 1000, 10000);
+      if (v === null) {
+        return this.invalidArg('value harus berupa angka 1000–10000 Kelvin.');
       }
       value = v;
     } else if (action === 'set_color') {

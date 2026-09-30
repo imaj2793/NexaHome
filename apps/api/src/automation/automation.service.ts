@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { AutomationTriggerType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { accessibleHomeFilter, accessibleHomeWhere } from '../homes/home-access';
 import {
   CommandResult,
   DeviceCoreService,
@@ -63,7 +64,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     if (homeId) await this.assertHomeOwned(userId, homeId);
     return this.prisma.automation.findMany({
       where: {
-        home: { ownerId: userId },
+        home: accessibleHomeFilter(userId),
         ...(homeId ? { homeId } : {}),
       },
       include: { triggers: true, actions: true },
@@ -73,7 +74,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
   async get(userId: string, id: string) {
     const automation = await this.prisma.automation.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
       include: { triggers: true, actions: true },
     });
     if (!automation) throw new NotFoundException('Automation tidak ditemukan.');
@@ -152,7 +153,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   /** Eksekusi manual sebuah automation (tanpa menunggu jadwal). */
   async runNow(userId: string, id: string) {
     const automation = await this.prisma.automation.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
       include: { actions: true },
     });
     if (!automation) throw new NotFoundException('Automation tidak ditemukan.');
@@ -237,7 +238,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
   private async assertHomeOwned(userId: string, homeId: string) {
     const home = await this.prisma.home.findFirst({
-      where: { id: homeId, ownerId: userId },
+      where: accessibleHomeWhere(userId, homeId),
     });
     if (!home) throw new NotFoundException('Home tidak ditemukan.');
     return home;
@@ -245,7 +246,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
 
   private async assertAutomationOwned(userId: string, id: string) {
     const automation = await this.prisma.automation.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
     });
     if (!automation) throw new NotFoundException('Automation tidak ditemukan.');
     return automation;

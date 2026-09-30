@@ -78,7 +78,11 @@ describe('NexaService', () => {
 
   /** Histori `messages` yang tercatat pada setiap panggilan ke provider. */
   const messageHistory: ChatMessage[][] = [];
-  let prismaStub: { device: { findMany: ReturnType<typeof vi.fn> } };
+  let prismaStub: {
+    device: { findMany: ReturnType<typeof vi.fn> };
+    home: { findFirst: ReturnType<typeof vi.fn> };
+    homeMember: { findFirst: ReturnType<typeof vi.fn> };
+  };
 
   beforeEach(() => {
     configValues = {
@@ -104,6 +108,14 @@ describe('NexaService', () => {
         findMany: vi.fn().mockResolvedValue([
           { id: 'dev_relay', name: 'Relay Dapur', room: { name: 'Dapur' }, type: 'switch' },
         ]),
+      },
+      // Event Nexa dikirim ke room milik user, jadi home yang dimiliki user
+      // perlu ada di stub.
+      home: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'home_1' }),
+      },
+      homeMember: {
+        findFirst: vi.fn().mockResolvedValue(null),
       },
     };
     speechSynthesize = vi.fn().mockResolvedValue(Buffer.from('audio'));
@@ -370,8 +382,9 @@ describe('NexaService', () => {
       });
       // Detail provider hanya ke log server, tidak dibocorkan ke client.
       expect(result.message).not.toContain('429');
+      // Event masuk ke room home milik user, bukan broadcast ke semua orang.
       expect(gateway.emitNexaState).toHaveBeenCalledWith(
-        '',
+        'home_1',
         'ERROR',
         result.message,
       );
@@ -518,8 +531,9 @@ describe('NexaService', () => {
       expect(result.degraded).toBe('llm_unavailable');
       expect(result.message).not.toContain('sk-live-abcd1234');
       expect(result.message).toMatch(/kesulitan berpikir/i);
+      // Event masuk ke room home milik user, bukan broadcast ke semua orang.
       expect(gateway.emitNexaState).toHaveBeenCalledWith(
-        '',
+        'home_1',
         'ERROR',
         result.message,
       );

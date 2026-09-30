@@ -75,10 +75,10 @@ describe('NexaToolsService', () => {
   });
 
   describe('getToolDefinitions', () => {
-    it('mengembalikan 11 definisi tool dengan nama yang tepat', () => {
+    it('mengembalikan 12 definisi tool dengan nama yang tepat', () => {
       const defs = service.getToolDefinitions();
 
-      expect(defs).toHaveLength(11);
+      expect(defs).toHaveLength(12);
       expect(defs.map((d) => d.name)).toEqual([
         'get_devices',
         'get_device_status',
@@ -87,6 +87,7 @@ describe('NexaToolsService', () => {
         'set_brightness',
         'set_color',
         'set_temperature',
+        'set_color_temperature',
         'get_room_status',
         'activate_scene',
         'create_automation',
@@ -653,7 +654,7 @@ describe('NexaToolsService', () => {
         ),
       );
 
-      expect(results).toHaveLength(11);
+      expect(results).toHaveLength(12);
       for (const result of results) {
         expect(result.success).toBe(false);
         expect(typeof result.message).toBe('string');

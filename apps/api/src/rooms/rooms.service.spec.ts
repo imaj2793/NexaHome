@@ -1,3 +1,4 @@
+import { accessibleHomeFilter, accessibleHomeWhere } from '../homes/home-access';
 import { NotFoundException } from '@nestjs/common';
 import { RoomsService } from './rooms.service';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -13,7 +14,7 @@ const makePrisma = () => ({
   },
 });
 
-const homeRow = { id: 'home_1', ownerId: 'usr_1' };
+const homeRow = accessibleHomeWhere('usr_1', 'home_1');
 const roomRow = { id: 'room_1', name: 'Kamar Tidur', homeId: 'home_1' };
 
 describe('RoomsService', () => {
@@ -32,7 +33,7 @@ describe('RoomsService', () => {
     const res = await service.findAll('usr_1');
 
     expect(prisma.room.findMany).toHaveBeenCalledWith({
-      where: { home: { ownerId: 'usr_1' } },
+      where: { home: accessibleHomeFilter('usr_1') },
       include: { _count: { select: { devices: true } } },
     });
     expect(res).toEqual([roomRow]);
@@ -45,7 +46,7 @@ describe('RoomsService', () => {
     const res = await service.findAll('usr_1', 'home_1');
 
     expect(prisma.home.findFirst).toHaveBeenCalledWith({
-      where: { id: 'home_1', ownerId: 'usr_1' },
+      where: accessibleHomeWhere('usr_1', 'home_1'),
     });
     expect(prisma.room.findMany).toHaveBeenCalledWith({
       where: { homeId: 'home_1' },
@@ -72,7 +73,7 @@ describe('RoomsService', () => {
     const res = await service.findOne('usr_1', 'room_1');
 
     expect(prisma.room.findFirst).toHaveBeenCalledWith({
-      where: { id: 'room_1', home: { ownerId: 'usr_1' } },
+      where: { id: 'room_1', home: accessibleHomeFilter('usr_1') },
       include: { devices: true },
     });
     expect(res.devices).toEqual([]);
@@ -117,7 +118,7 @@ describe('RoomsService', () => {
     const res = await service.update('usr_1', 'room_1', { name: 'Kamar Mandi' });
 
     expect(prisma.room.findFirst).toHaveBeenCalledWith({
-      where: { id: 'room_1', home: { ownerId: 'usr_1' } },
+      where: { id: 'room_1', home: accessibleHomeFilter('usr_1') },
     });
     expect(prisma.room.update).toHaveBeenCalledWith({
       where: { id: 'room_1' },

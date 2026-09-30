@@ -1,5 +1,6 @@
-import { NotFoundException } from '@nestjs/common';
+import { ApiError } from '../common/errors/api-error';
 import { HomesService } from './homes.service';
+import { accessibleHomeFilter } from './home-access';
 import type { PrismaService } from '../prisma/prisma.service';
 
 const makePrisma = () => ({
@@ -34,8 +35,11 @@ describe('HomesService', () => {
     const res = await service.findAll('usr_1');
 
     expect(prisma.home.findMany).toHaveBeenCalledWith({
-      where: { ownerId: 'usr_1' },
-      include: { _count: { select: { rooms: true, devices: true } } },
+      where: accessibleHomeFilter('usr_1'),
+      include: {
+        _count: { select: { rooms: true, devices: true } },
+        members: { select: { userId: true, role: true } },
+      },
     });
     expect(res).toEqual([homeRow]);
   });
@@ -51,7 +55,10 @@ describe('HomesService', () => {
     const res = await service.findOne('usr_1', 'home_1');
 
     expect(prisma.home.findFirst).toHaveBeenCalledWith({
-      where: { id: 'home_1', ownerId: 'usr_1' },
+      where: {
+        id: 'home_1',
+        OR: [{ ownerId: 'usr_1' }, { members: { some: { userId: 'usr_1' } } }],
+      },
       include: { rooms: true, devices: true, integrations: true },
     });
     expect(res.rooms).toEqual([]);
@@ -60,9 +67,9 @@ describe('HomesService', () => {
   it('findOne melempar NotFoundException bila home milik user lain', async () => {
     prisma.home.findFirst.mockResolvedValue(null as never);
 
-    await expect(service.findOne('usr_2', 'home_1')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.findOne('usr_2', 'home_1')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
   });
 
   it('create menyimpan ownerId dari argumen, bukan dari DTO', async () => {
@@ -97,7 +104,7 @@ describe('HomesService', () => {
 
     await expect(
       service.update('usr_2', 'home_1', { name: 'Rumah Baru' }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(prisma.home.update).not.toHaveBeenCalled();
   });
 
@@ -113,7 +120,7 @@ describe('HomesService', () => {
     prisma.home.findFirst.mockResolvedValue(null as never);
 
     await expect(service.remove('usr_2', 'home_1')).rejects.toBeInstanceOf(
-      NotFoundException,
+      ApiError,
     );
     expect(prisma.home.delete).not.toHaveBeenCalled();
   });

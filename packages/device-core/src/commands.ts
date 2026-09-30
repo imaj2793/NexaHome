@@ -2,7 +2,12 @@ import { IntegrationCommand } from './integration';
 
 /**
  * Konversi aksi (turn_on / turn_off / set_brightness / set_color /
- * set_temperature) menjadi perintah capability netral (blueprint §13 tools).
+ * set_temperature / set_color_temperature) menjadi perintah capability netral.
+ *
+ * `set_temperature` = suhu AC (°C); `set_color_temperature` = suhu warna lampu
+ * (K). Keduanya sengaja dipisah: spec §4 memberi AC capability `temperature`
+ * dan lampu capability `color_temperature`, dan menggabungkannya membuat
+ * validasi capability mustahil.
  */
 export function toIntegrationCommand(
   action: string,
@@ -19,6 +24,8 @@ export function toIntegrationCommand(
       return { capability: 'color', value };
     case 'set_temperature':
       return { capability: 'temperature', value };
+    case 'set_color_temperature':
+      return { capability: 'color_temperature', value };
     default:
       throw new Error(`Aksi tidak dikenal: ${action}`);
   }
@@ -52,6 +59,9 @@ export function applyCommandToState(
     case 'temperature':
       next.temperature = command.value;
       break;
+    case 'color_temperature':
+      next.color_temperature = command.value;
+      break;
   }
 
   return next;
@@ -73,6 +83,8 @@ export function humanizeCommand(
     case 'set_color':
       return `${deviceName} warna diubah.`;
     case 'set_temperature':
+      return `${deviceName} disetel ke ${value}°C.`;
+    case 'set_color_temperature':
       return `${deviceName} suhu warna ${value}K.`;
     default:
       return `${deviceName} diperbarui.`;

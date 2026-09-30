@@ -4,6 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  accessibleHomeFilter,
+  accessibleHomeWhere,
+} from '../homes/home-access';
 import { DeviceCoreService } from '../device-core/device-core.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
@@ -15,6 +19,7 @@ const VALID_ACTIONS = [
   'set_brightness',
   'set_color',
   'set_temperature',
+  'set_color_temperature',
 ];
 
 @Injectable()
@@ -28,7 +33,7 @@ export class DevicesService {
     if (homeId) await this.assertHomeOwned(userId, homeId);
     return this.prisma.device.findMany({
       where: {
-        home: { ownerId: userId },
+        home: accessibleHomeFilter(userId),
         ...(homeId ? { homeId } : {}),
         ...(roomId ? { roomId } : {}),
       },
@@ -39,7 +44,7 @@ export class DevicesService {
 
   async findOne(userId: string, id: string) {
     const device = await this.prisma.device.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
       include: { room: true, integration: true },
     });
     if (!device) throw new NotFoundException('Perangkat tidak ditemukan.');
@@ -89,7 +94,7 @@ export class DevicesService {
     }
 
     const device = await this.prisma.device.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
       include: { integration: true },
     });
     if (!device) throw new NotFoundException('Perangkat tidak ditemukan.');
@@ -99,7 +104,7 @@ export class DevicesService {
 
   private async assertHomeOwned(userId: string, homeId: string) {
     const home = await this.prisma.home.findFirst({
-      where: { id: homeId, ownerId: userId },
+      where: accessibleHomeWhere(userId, homeId),
     });
     if (!home) throw new NotFoundException('Home tidak ditemukan.');
     return home;
@@ -107,7 +112,7 @@ export class DevicesService {
 
   private async assertDeviceOwned(userId: string, id: string) {
     const device = await this.prisma.device.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
     });
     if (!device) throw new NotFoundException('Perangkat tidak ditemukan.');
     return device;

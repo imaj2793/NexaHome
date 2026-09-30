@@ -16,6 +16,10 @@ export interface MqttAdapterConfig {
   mode?: 'mock' | 'mqtt';
   /** URL broker MQTT (mis. `mqtt://localhost:1883`). Wajib saat mode 'mqtt'. */
   url?: string;
+  /** Username broker. Wajib bila broker menolak koneksi anonymous. */
+  username?: string;
+  /** Password broker. */
+  password?: string;
   /** Masa berlaku penemuan (ms). Default 120 detik. */
   discoveryTtlMs?: number;
 }
@@ -29,6 +33,9 @@ const MQTT_MODES: readonly MqttMode[] = ['mock', 'mqtt'];
 interface ResolvedConfig {
   mode: MqttMode;
   url?: string;
+  /** Kredensial broker; dipakai kalau broker tidak mengizinkan anonymous. */
+  username?: string;
+  password?: string;
   /**
    * Berapa lama perangkat tetap dilaporkan hasil scan sejak pesan terakhirnya.
    * Default 120 detik. Tanpa ini, perangkat yang dihapus/dimatikan tetap
@@ -110,6 +117,8 @@ export class MqttAdapter implements IntegrationAdapter {
     this.config = {
       mode,
       url: config.url,
+      username: config.username,
+      password: config.password,
       // `||` bukan `??`: env yang dikosongkan di .env tetap string "".
       discoveryTtlMs: Number(config.discoveryTtlMs) || 120_000,
     };
@@ -229,7 +238,16 @@ export class MqttAdapter implements IntegrationAdapter {
 
   private connectBroker(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const client = mqtt.connect(this.config.url!);
+      // Env yang dikosongkan di .env tetap string "", jadi pakai `||` agar
+      // tidak terkirim sebagai username kosong.
+      const credentials =
+        this.config.username && this.config.password
+          ? {
+              username: this.config.username,
+              password: this.config.password,
+            }
+          : {};
+      const client = mqtt.connect(this.config.url!, credentials);
       this.client = client;
 
       client.on('error', reject);

@@ -1,3 +1,4 @@
+import { accessibleHomeFilter, accessibleHomeWhere } from '../homes/home-access';
 import { NotFoundException } from '@nestjs/common';
 import { ActivityLogService } from './activity-log.service';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -7,7 +8,7 @@ const makePrisma = () => ({
   activityLog: { findMany: vi.fn() },
 });
 
-const homeRow = { id: 'home_1', ownerId: 'usr_1' };
+const homeRow = accessibleHomeWhere('usr_1', 'home_1');
 const logRow = {
   id: 'log_1',
   homeId: 'home_1',
@@ -33,7 +34,7 @@ describe('ActivityLogService', () => {
 
     expect(prisma.home.findFirst).not.toHaveBeenCalled();
     expect(prisma.activityLog.findMany).toHaveBeenCalledWith({
-      where: { home: { ownerId: 'usr_1' } },
+      where: { home: accessibleHomeFilter('usr_1') },
       include: { device: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
@@ -48,10 +49,10 @@ describe('ActivityLogService', () => {
     await service.findAll('usr_1', 'home_1');
 
     expect(prisma.home.findFirst).toHaveBeenCalledWith({
-      where: { id: 'home_1', ownerId: 'usr_1' },
+      where: accessibleHomeWhere('usr_1', 'home_1'),
     });
     expect(prisma.activityLog.findMany).toHaveBeenCalledWith({
-      where: { home: { ownerId: 'usr_1' }, homeId: 'home_1' },
+      where: { home: accessibleHomeFilter('usr_1'), homeId: 'home_1' },
       include: { device: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 50,

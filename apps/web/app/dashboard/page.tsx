@@ -15,7 +15,11 @@ import {
   type ApiScene,
 } from '@/lib/api';
 import { getToken, getUser } from '@/lib/auth';
-import { connectSocket, type DeviceStateEvent } from '@/lib/socket';
+import {
+  connectSocket,
+  joinHome,
+  type DeviceStateEvent,
+} from '@/lib/socket';
 import NexaChat from '@/components/nexa-chat';
 import DeviceCard from '@/components/device-card';
 import AddDeviceModal from '@/components/add-device-modal';
@@ -90,10 +94,14 @@ export default function DashboardPage() {
   }, [load, router]);
 
   // Live update via WebSocket: state perangkat berubah → perbarui tanpa reload.
+  // Event hanya diterima setelah server memverifikasi token dan kita diizinkan
+  // masuk ke room home ini.
   useEffect(() => {
-    if (!getToken()) return;
+    if (!getToken() || !home) return;
     const socket = connectSocket();
+    socket.on('connect', () => joinHome(socket, home.id));
     socket.on('device:state', (data: DeviceStateEvent) => {
+      if (data.homeId !== home.id) return;
       setDevices((prev) =>
         prev.map((d) =>
           d.id === data.deviceId ? { ...d, state: data.state } : d,
@@ -103,7 +111,7 @@ export default function DashboardPage() {
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [home?.id]);
 
   // Tutup modal riwayat dengan Escape.
   useEffect(() => {
@@ -467,7 +475,7 @@ export default function DashboardPage() {
           </div>
 
           <aside className="h-[70vh] xl:sticky xl:top-20">
-            <NexaChat />
+            {home && <NexaChat homeId={home.id} />}
           </aside>
         </div>
       </div>

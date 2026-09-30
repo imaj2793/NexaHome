@@ -13,7 +13,14 @@ import {
 } from '@nexahome/device-core';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
+import { ApiError } from '../common/errors/api-error';
+import { ErrorCode } from '../common/errors/error-codes';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  assertCapabilitySupported,
+  assertValueInRange,
+  toAdapterError,
+} from './command-errors';
 import { DeviceGateway } from './device.gateway';
 
 /** Bentuk device minimal yang dibutuhkan untuk mengeksekusi perintah. */
@@ -23,6 +30,7 @@ export interface ExecutableDevice {
   homeId: string;
   integrationId: string | null;
   externalId: string | null;
+  capabilities?: readonly string[] | null;
   state: unknown;
 }
 
@@ -92,18 +100,50 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
       : null;
 
     const current = (device.state ?? {}) as Record<string, unknown>;
+
+    // Kapabilitas divalidasi SEBELUM menyentuh perangkat (spec §2 aturan 10).
+    // `toIntegrationCommand` juga menolak aksi yang tidak dikenal.
+    let command;
+    try {
+      command = toIntegrationCommand(action, value);
+    } catch {
+      throw new ApiError(
+        ErrorCode.INVALID_COMMAND_VALUE,
+        `Perintah "${action}" tidak dikenali untuk ${device.name}.`,
+      );
+    }
+    assertCapabilitySupported(device.capabilities, command.capability, device.name);
+    assertValueInRange(command.capability, command.value);
+
+    // `online: false` berarti laporan perangkat terakhir (atau adapter) sudah
+    // menyatakan perangkat mati; jangan kirim perintah yang pasti gagal.
+    if (current.online === false) {
+      throw new ApiError(
+        ErrorCode.DEVICE_OFFLINE,
+        `${device.name} sedang tidak tersedia.`,
+        { device: device.name },
+      );
+    }
+
     let nextState: Record<string, unknown>;
     let external = false;
 
     if (integration && integration.enabled && device.externalId) {
-      const command = toIntegrationCommand(action, value);
-      const result = await this.manager.executeCommand(
-        integration.type,
-        device.externalId,
-        command,
-      );
-      nextState = { ...current, ...result };
-      external = true;
+      try {
+        const result = await this.manager.executeCommand(
+          integration.type,
+          device.externalId,
+          command,
+        );
+        nextState = { ...current, ...result };
+        external = true;
+      } catch (error) {
+        this.logger.warn(
+          `Perintah ${action} untuk ${device.name} gagal: ` +
+            (error instanceof Error ? error.message : String(error)),
+        );
+        throw toAdapterError(error);
+      }
     } else {
       nextState = applyCommandToState(current, action, value);
     }

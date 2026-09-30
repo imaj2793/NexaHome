@@ -12,8 +12,8 @@ vi.mock('@/lib/api', async (importOriginal) => {
 const apiMock = vi.mocked(api);
 
 const integrations: ApiIntegration[] = [
-  { id: 'int-1', name: 'Shelly', type: 'shelly', homeId: 'home-1', enabled: true, config: {} },
-  { id: 'int-2', name: 'MQTT', type: 'mqtt', homeId: 'home-1', enabled: true, config: {} },
+  { id: 'int-1', name: 'Shelly', type: 'shelly', homeId: 'home-1', enabled: true, config: {}, credentialsEncrypted: true },
+  { id: 'int-2', name: 'MQTT', type: 'mqtt', homeId: 'home-1', enabled: true, config: {}, credentialsEncrypted: true },
 ];
 
 const rooms: ApiRoom[] = [

@@ -48,6 +48,20 @@ export function validateEnv(config: Record<string, unknown>) {
     errors.push('DATABASE_URL wajib diisi.');
   }
 
+  // Kredensial integrasi disimpan terenkripsi (§12). Tanpa kunci, satu-satunya
+  // pilihan adalah menyimpan plaintext — itu tidak boleh terjadi diam-diam.
+  const credKey =
+    typeof config.INTEGRATION_CREDENTIALS_KEY === 'string'
+      ? config.INTEGRATION_CREDENTIALS_KEY.trim()
+      : '';
+  if (!credKey) {
+    errors.push(
+      'INTEGRATION_CREDENTIALS_KEY wajib diisi (openssl rand -base64 32).',
+    );
+  } else if (credKey.length < 16) {
+    errors.push('INTEGRATION_CREDENTIALS_KEY minimal 16 karakter.');
+  }
+
   if (isProd) {
     if (corsOrigins.length === 0) {
       errors.push('CORS_ORIGIN wajib diisi di produksi.');

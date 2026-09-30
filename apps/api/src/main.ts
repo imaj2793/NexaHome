@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import { AppExceptionFilter } from './common/errors/app-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,6 +16,9 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true }),
   );
+  // Kontrak error seragam untuk semua route (spec §13):
+  // { success: false, error: { code, message } }
+  app.useGlobalFilters(new AppExceptionFilter());
 
   // Di belakang reverse proxy (nginx/traefik), aktifkan trust proxy agar
   // rate limiting melihat IP klien sebenarnya (set TRUST_PROXY=1).

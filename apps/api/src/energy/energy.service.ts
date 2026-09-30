@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { accessibleHomeFilter } from '../homes/home-access';
 
 /** Estimasi konsumsi daya (watt) per tipe perangkat — untuk monitoring energi. */
 const WATTAGE: Record<string, number> = {
@@ -18,7 +19,7 @@ export class EnergyService {
   /** Ringkasan pemakaian energi berdasarkan perangkat yang sedang aktif. */
   async summary(userId: string) {
     const devices = await this.prisma.device.findMany({
-      where: { home: { ownerId: userId } },
+      where: { home: accessibleHomeFilter(userId) },
     });
 
     const active = devices.filter(

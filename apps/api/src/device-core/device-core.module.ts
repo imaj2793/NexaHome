@@ -5,6 +5,7 @@ import { MqttAdapter } from '@nexahome/integration-mqtt';
 import type { MqttAdapterConfig } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
 import type { TasmotaAdapterConfig } from '@nexahome/integration-tasmota';
+import { AuthModule } from '../auth/auth.module';
 import { DeviceCoreService } from './device-core.service';
 import { DeviceGateway } from './device.gateway';
 
@@ -12,6 +13,7 @@ type MqttMode = NonNullable<MqttAdapterConfig['mode']>;
 type TasmotaMode = NonNullable<TasmotaAdapterConfig['mode']>;
 
 @Module({
+  imports: [AuthModule],
   providers: [
     DeviceGateway,
     DeviceCoreService,
@@ -26,6 +28,8 @@ type TasmotaMode = NonNullable<TasmotaAdapterConfig['mode']>;
           url: config.get<string>('MQTT_URL'),
           // `||` bukan `??`: env yang dikosongkan di .env tetap string "".
           discoveryTtlMs: ttl ? Number(ttl) : undefined,
+          username: config.get<string>('MQTT_USERNAME') || undefined,
+          password: config.get<string>('MQTT_PASSWORD') || undefined,
         });
       },
     },

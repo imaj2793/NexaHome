@@ -1,3 +1,4 @@
+import { accessibleHomeFilter, accessibleHomeWhere } from '../homes/home-access';
 import { NotFoundException } from '@nestjs/common';
 import { AutomationTriggerType } from '@prisma/client';
 import { AutomationService } from './automation.service';
@@ -18,7 +19,7 @@ const makePrisma = () => ({
 
 const makeDeviceCore = () => ({ executeCommand: vi.fn() });
 
-const homeRow = { id: 'home_1', ownerId: 'usr_1' };
+const homeRow = accessibleHomeWhere('usr_1', 'home_1');
 const deviceRow = {
   id: 'dev_1',
   name: 'Lampu Meja',
@@ -89,7 +90,7 @@ describe('AutomationService', () => {
       const res = await service.list('usr_1');
 
       expect(prisma.automation.findMany).toHaveBeenCalledWith({
-        where: { home: { ownerId: 'usr_1' } },
+        where: { home: accessibleHomeFilter('usr_1') },
         include: { triggers: true, actions: true },
         orderBy: { createdAt: 'asc' },
       });
@@ -103,10 +104,10 @@ describe('AutomationService', () => {
       await service.list('usr_1', 'home_1');
 
       expect(prisma.home.findFirst).toHaveBeenCalledWith({
-        where: { id: 'home_1', ownerId: 'usr_1' },
+        where: accessibleHomeWhere('usr_1', 'home_1'),
       });
       expect(prisma.automation.findMany).toHaveBeenCalledWith({
-        where: { home: { ownerId: 'usr_1' }, homeId: 'home_1' },
+        where: { home: accessibleHomeFilter('usr_1'), homeId: 'home_1' },
         include: { triggers: true, actions: true },
         orderBy: { createdAt: 'asc' },
       });
@@ -129,7 +130,7 @@ describe('AutomationService', () => {
       const res = await service.get('usr_1', 'auto_1');
 
       expect(prisma.automation.findFirst).toHaveBeenCalledWith({
-        where: { id: 'auto_1', home: { ownerId: 'usr_1' } },
+        where: { id: 'auto_1', home: accessibleHomeFilter('usr_1') },
         include: { triggers: true, actions: true },
       });
       expect(res.triggers).toHaveLength(1);

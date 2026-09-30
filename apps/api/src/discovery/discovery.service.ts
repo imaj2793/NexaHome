@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { IntegrationType } from '@prisma/client';
 import { DiscoveredDevice, IntegrationManager } from '@nexahome/device-core';
 import { Bonjour, Browser, Service } from 'bonjour-service';
+import { accessibleHomeWhere } from '../homes/home-access';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Tipe service mDNS (DNS-SD) yang di-scan — lintas vendor. */
@@ -72,7 +73,7 @@ export class DiscoveryService {
     const { homeId, roomId, integrationId, device } = input;
 
     const home = await this.prisma.home.findFirst({
-      where: { id: homeId, ownerId: userId },
+      where: accessibleHomeWhere(userId, homeId),
     });
     if (!home) throw new NotFoundException('Home tidak ditemukan.');
 

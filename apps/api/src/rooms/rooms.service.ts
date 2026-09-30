@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  accessibleHomeFilter,
+  accessibleHomeWhere,
+} from '../homes/home-access';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 
@@ -16,14 +20,14 @@ export class RoomsService {
       });
     }
     return this.prisma.room.findMany({
-      where: { home: { ownerId: userId } },
+      where: { home: accessibleHomeFilter(userId) },
       include: { _count: { select: { devices: true } } },
     });
   }
 
   async findOne(userId: string, id: string) {
     const room = await this.prisma.room.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
       include: { devices: true },
     });
     if (!room) throw new NotFoundException('Ruangan tidak ditemukan.');
@@ -47,7 +51,7 @@ export class RoomsService {
 
   private async assertHomeOwned(userId: string, homeId: string) {
     const home = await this.prisma.home.findFirst({
-      where: { id: homeId, ownerId: userId },
+      where: accessibleHomeWhere(userId, homeId),
     });
     if (!home) throw new NotFoundException('Home tidak ditemukan.');
     return home;
@@ -55,7 +59,7 @@ export class RoomsService {
 
   private async assertRoomOwned(userId: string, id: string) {
     const room = await this.prisma.room.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
     });
     if (!room) throw new NotFoundException('Ruangan tidak ditemukan.');
     return room;

@@ -10,6 +10,7 @@ import {
 } from '@nexahome/ai';
 import { DeviceGateway } from '../device-core/device.gateway';
 import { PrismaService } from '../prisma/prisma.service';
+import { accessibleHomeFilter } from '../homes/home-access';
 import { NexaToolsService } from './nexa-tools.service';
 
 const SYSTEM_PROMPT = [
@@ -56,10 +57,27 @@ export class NexaService {
     private readonly prisma: PrismaService,
   ) {}
 
+  /**
+   * Room pertama milik user (rumah yang dimiliki atau dianggotai). Dipakai untuk
+   *olymer where event Nexa; string kosong berarti tidak ada room tujuan.
+   */
+  private async primaryHomeId(userId: string): Promise<string> {
+    const owned = await this.prisma.home.findFirst({
+      where: { ownerId: userId },
+      select: { id: true },
+    });
+    if (owned) return owned.id;
+    const member = await this.prisma.homeMember.findFirst({
+      where: { userId },
+      select: { homeId: true },
+    });
+    return member?.homeId ?? '';
+  }
+
   /** Daftar perangkat milik user — dikirim ke provider AI agar tidak mengarang ID. */
   private async deviceHints(userId: string): Promise<DeviceHint[]> {
     const devices = await this.prisma.device.findMany({
-      where: { home: { ownerId: userId } },
+      where: { home: accessibleHomeFilter(userId) },
       include: { room: true },
       orderBy: { name: 'asc' },
       take: 100,
@@ -116,7 +134,10 @@ export class NexaService {
   }
 
   async chat(userId: string, message: string): Promise<NexaChatResult> {
-    this.gateway.emitNexaState('', 'THINKING');
+    // Event Nexa dikirim ke room milik user ini saja, bukan broadcast —
+    // dashboard orang lain tidak boleh melihat isi percakapan ini.
+    const homeId = await this.primaryHomeId(userId);
+    this.gateway.emitNexaState(homeId, 'THINKING');
     try {
       const provider = this.getProvider();
       const hints = await this.deviceHints(userId);
@@ -157,11 +178,11 @@ export class NexaService {
               ? { degraded: 'tool_failed' as const }
               : {}),
           };
-          this.gateway.emitNexaState('', result.state, result.message);
+          this.gateway.emitNexaState(homeId, result.state, result.message);
           return result;
         }
 
-        this.gateway.emitNexaState('', 'PROCESSING');
+        this.gateway.emitNexaState(homeId, 'PROCESSING');
         for (const call of calls) {
           let args: Record<string, unknown> = {};
           try {
@@ -196,7 +217,7 @@ export class NexaService {
         state: lastTool && !lastTool.success ? 'ERROR' : 'SUCCESS',
         ...(lastTool ? { tool: lastTool } : {}),
       };
-      this.gateway.emitNexaState('', result.state, result.message);
+      this.gateway.emitNexaState(homeId, result.state, result.message);
       return result;
     } catch (err) {
       // Detail (pesan provider, URL, dst.) hanya ke log server agar tidak
@@ -210,7 +231,7 @@ export class NexaService {
         state: 'ERROR',
         degraded: 'llm_unavailable',
       };
-      this.gateway.emitNexaState('', 'ERROR', result.message);
+      this.gateway.emitNexaState(homeId, 'ERROR', result.message);
       return result;
     }
   }

@@ -49,7 +49,10 @@ export interface ApiIntegration {
   type: string;
   homeId: string;
   enabled: boolean;
+  /** Nilainya sudah disamarkan server; nilai asli tidak pernah dikirim. */
   config: Record<string, unknown>;
+  /** false = config lama yang belum dienkripsi; simpan ulang lewat PATCH. */
+  credentialsEncrypted: boolean;
 }
 
 export interface DiscoveredDevice {
@@ -100,10 +103,21 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    /** Kode error kanonik dari API (spec §13), mis. 'DEVICE_OFFLINE'. */
+    public code?: string,
+    public details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+/** Bentuk error yang dikirim API. */
+interface ApiErrorEnvelope {
+  error?: { code?: string; message?: string; details?: Record<string, unknown> };
+  // Bentuk lama masih diterima supaya client tidak gagal total bila API
+  // belum ter-deploy versi baru.
+  message?: string | string[];
 }
 
 export async function api<T>(
@@ -126,10 +140,19 @@ export async function api<T>(
   const body = text ? JSON.parse(text) : null;
 
   if (!res.ok) {
+    const envelope = (body ?? {}) as ApiErrorEnvelope;
+    const nested = envelope.error?.message;
+    const legacy = Array.isArray(envelope.message)
+      ? envelope.message.join(' ')
+      : envelope.message;
     const message =
-      (body && typeof body.message === 'string' ? body.message : null) ??
-      `Request gagal (${res.status})`;
-    throw new ApiError(message, res.status);
+      nested ?? legacy ?? `Request gagal (${res.status})`;
+    throw new ApiError(
+      message,
+      res.status,
+      envelope.error?.code,
+      envelope.error?.details,
+    );
   }
 
   return body as T;

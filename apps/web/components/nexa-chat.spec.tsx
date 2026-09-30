@@ -93,7 +93,7 @@ describe('NexaChat — mode terbatas', () => {
   it('memberi tahu mode demo dan voice nonaktif saat degraded', async () => {
     mockFetchStatus.mockResolvedValue(LIMITED);
 
-    render(<NexaChat />);
+    render(<NexaChat homeId="home_1" />);
 
     const note = await screen.findByText(/mode demo/i);
     expect(note).toHaveTextContent(/WHISPER_MODEL/);
@@ -102,7 +102,7 @@ describe('NexaChat — mode terbatas', () => {
   it('menonaktifkan tombol mikrofon saat STT belum dikonfigurasi', async () => {
     mockFetchStatus.mockResolvedValue(LIMITED);
 
-    render(<NexaChat />);
+    render(<NexaChat homeId="home_1" />);
 
     await waitFor(() => {
       expect(
@@ -114,7 +114,7 @@ describe('NexaChat — mode terbatas', () => {
   it('menyediakan mikrofon saat STT siap', async () => {
     mockFetchStatus.mockResolvedValue(FULL);
 
-    render(<NexaChat />);
+    render(<NexaChat homeId="home_1" />);
 
     await waitFor(() => {
       expect(
@@ -130,7 +130,7 @@ describe('NexaChat — mode terbatas', () => {
       new Error('STT belum dikonfigurasi (WHISPER_MODEL kosong).'),
     );
     const user = userEvent.setup();
-    render(<NexaChat />);
+    render(<NexaChat homeId="home_1" />);
 
     // Rekam lalu hentikan → STT ditolak backend.
     await user.click(screen.getByRole('button', { name: /mulai bicara/i }));

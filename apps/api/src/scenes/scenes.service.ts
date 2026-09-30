@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { accessibleHomeFilter, accessibleHomeWhere } from '../homes/home-access';
 import {
   CommandResult,
   DeviceCoreService,
@@ -21,7 +22,7 @@ export class ScenesService {
     if (homeId) await this.assertHomeOwned(userId, homeId);
     return this.prisma.scene.findMany({
       where: {
-        home: { ownerId: userId },
+        home: accessibleHomeFilter(userId),
         ...(homeId ? { homeId } : {}),
       },
       include: { actions: true },
@@ -31,7 +32,7 @@ export class ScenesService {
 
   async get(userId: string, id: string) {
     const scene = await this.prisma.scene.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
       include: { actions: true },
     });
     if (!scene) throw new NotFoundException('Scene tidak ditemukan.');
@@ -88,7 +89,7 @@ export class ScenesService {
 
   async activate(userId: string, id: string) {
     const scene = await this.prisma.scene.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
       include: { actions: true },
     });
     if (!scene) throw new NotFoundException('Scene tidak ditemukan.');
@@ -97,7 +98,7 @@ export class ScenesService {
 
     for (const action of scene.actions) {
       const device = await this.prisma.device.findFirst({
-        where: { id: action.deviceId, home: { ownerId: userId } },
+        where: { id: action.deviceId, home: accessibleHomeFilter(userId) },
       });
       if (!device) {
         results.push({
@@ -122,7 +123,7 @@ export class ScenesService {
 
   private async assertHomeOwned(userId: string, homeId: string) {
     const home = await this.prisma.home.findFirst({
-      where: { id: homeId, ownerId: userId },
+      where: accessibleHomeWhere(userId, homeId),
     });
     if (!home) throw new NotFoundException('Home tidak ditemukan.');
     return home;
@@ -130,7 +131,7 @@ export class ScenesService {
 
   private async assertSceneOwned(userId: string, id: string) {
     const scene = await this.prisma.scene.findFirst({
-      where: { id, home: { ownerId: userId } },
+      where: { id, home: accessibleHomeFilter(userId) },
     });
     if (!scene) throw new NotFoundException('Scene tidak ditemukan.');
     return scene;

@@ -1,3 +1,4 @@
+import { accessibleHomeFilter } from '../homes/home-access';
 import { EnergyService } from './energy.service';
 import type { PrismaService } from '../prisma/prisma.service';
 
@@ -33,7 +34,7 @@ describe('EnergyService', () => {
     const res = await service.summary('usr_1');
 
     expect(prisma.device.findMany).toHaveBeenCalledWith({
-      where: { home: { ownerId: 'usr_1' } },
+      where: { home: accessibleHomeFilter('usr_1') },
     });
     expect(res.activeCount).toBe(2);
     expect(res.totalWatts).toBe(130);

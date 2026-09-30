@@ -10,7 +10,7 @@ import {
   type NexaCapabilities,
   type NexaState,
 } from '@/lib/nexa';
-import { connectSocket } from '@/lib/socket';
+import { connectSocket, joinHome } from '@/lib/socket';
 import NexaRobot from '@/components/nexa-robot';
 import NexaRobotView from '@/components/nexa-robot-view';
 
@@ -28,7 +28,7 @@ interface NexaStateEvent {
 
 let nextId = 0;
 
-export default function NexaChat() {
+export default function NexaChat({ homeId }: { homeId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: nextId++, role: 'nexa', text: 'Halo! Aku Nexa 🤖 Ada yang bisa kubantu?' },
   ]);
@@ -50,17 +50,19 @@ export default function NexaChat() {
   }, [messages, pending, status]);
 
   // Status live via WebSocket (state + pesan → robot visual).
+  // Server hanya mengirim ke room home yang sudah di-join.
   useEffect(() => {
     const socket = connectSocket();
+    socket.on('connect', () => joinHome(socket, homeId));
     socket.on('nexa.state', (data: NexaStateEvent) => {
-      if (data && typeof data.state === 'string') {
+      if (data && data.homeId === homeId && typeof data.state === 'string') {
         setStatus(data.state);
       }
     });
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [homeId]);
 
   // Mode terbatas harus terlihat jelas, bukan muncul sebagai error saat dipakai.
   useEffect(() => {
