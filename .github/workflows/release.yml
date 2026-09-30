@@ -33,15 +33,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - id: meta
+      # Satu langkah metadata PER IMAGE: kalau digabung, setiap build akan
+      # memakai tag milik kedua image dan :latest jadi tertukar.
+      - id: meta-api
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ghcr.io/${{ github.repository }}/api
-            ghcr.io/${{ github.repository }}/web
+          images: ghcr.io/${{ github.repository }}/api
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - id: meta-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/web
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      # Image one-shot untuk `prisma migrate deploy`;compose membutuhkannya
+      # agar instalasi dari image rilis tidak perlu build lokal.
+      - id: meta-migrate
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/api-migrate
+          tags: |
+            type=semver,pattern={{version}}
             type=raw,value=latest
 
       - name: Build & push image API
@@ -51,8 +70,8 @@ jobs:
           file: apps/api/Dockerfile
           target: runner
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -62,18 +81,35 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Ringkasan ukuran image
+      - name: Build & push image migrate
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: migrate
+          push: true
+          tags: ${{ steps.meta-migrate.outputs.tags }}
+          labels: ${{ steps.meta-migrate.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Ringkasan image
         run: |
           {
-            echo "### Ukuran image"
+            echo "### Image yang dipublikasikan"
             echo '```'
-            echo "${{ steps.meta.outputs.tags }}"
+            echo "${{ steps.meta-api.outputs.tags }}"
+            echo "${{ steps.meta-web.outputs.tags }}"
+            echo "${{ steps.meta-migrate.outputs.tags }}"
             echo '```'
+            echo
+            echo "Paket GHCR baru dibuat private. Agar bisa di-pull tanpa login,"
+            echo "buka Settings pada masing-masing package dan pilih visibility Public."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Buat GitHub Release
@@ -88,7 +124,8 @@ jobs:
               https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/docker-compose.yml
             curl -fsSL -o .env \
               https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/.env.example
-            sed -i '' "s|^JWT_SECRET=.*|JWT_SECRET=\"$(openssl rand -hex 32)\"|" .env
+            JWT_SECRET="$(openssl rand -hex 32)" \
+              awk 'BEGIN{FS=OFS="="} /^JWT_SECRET=/{print "JWT_SECRET=\"" ENVIRON["JWT_SECRET"] "\""; next} {print}' .env > .env.tmp && mv .env.tmp .env
             docker compose up -d
             ```
 
