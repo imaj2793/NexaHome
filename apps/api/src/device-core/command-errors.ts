@@ -1,3 +1,4 @@
+import { HttpException } from '@nestjs/common';
 import { ApiError } from '../common/errors/api-error';
 import { ErrorCode } from '../common/errors/error-codes';
 
@@ -41,6 +42,13 @@ function looksOffline(error: unknown): boolean {
  * Detail teknis (URL, kredensial) tidak ikut ke pesan yang sampai ke klien.
  */
 export function toAdapterError(error: unknown): ApiError {
+  // Error yang sudah punya kode kontrak (mis. kredensial tidak terbaca)
+  // diteruskan apa adanya — menerjemahkannya jadi INTEGRATION_COMMAND_FAILED
+  // menyembunyikan penyebab sebenarnya dari pengguna.
+  if (error instanceof ApiError || error instanceof HttpException) {
+    return error as ApiError;
+  }
+
   const raw = error instanceof Error ? error.message : String(error);
 
   if (raw.includes('Tidak ada integration untuk tipe')) {

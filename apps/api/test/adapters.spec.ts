@@ -12,9 +12,9 @@ const cmd = (capability: string, value: unknown): IntegrationCommand => ({
 });
 
 // ── Klien MQTT palsu untuk menguji mode 'mqtt' tanpa broker sungguhan ──
-// Catatan: `mqtt` hanya terpasang di packages/integration-mqtt, dan dist-nya
-// CommonJS yang di-externalize Vite sehingga vi.mock tidak meng-intercept.
-// Karena itu client disuntikkan langsung ke field privat adapter.
+// Catatan: `mqtt` hanya terpasang di packages/integration-mqtt, jadi `vi.mock`
+// dari sisi app tidak mengenainya. Karena itu client disuntikkan langsung ke
+// field privat adapter.
 type Handler = (...args: never[]) => void;
 
 interface FakeClient {
@@ -239,7 +239,7 @@ describe('MqttAdapter (mode mqtt)', () => {
     expect(client.publish).toHaveBeenCalledWith(
       'nexahome/devices/lampu_a/set',
       JSON.stringify({ capability: 'brightness', value: 90 }),
-      {},
+      { qos: 0 },
       expect.any(Function),
     );
     expect(state).toEqual({ power: false, brightness: 90 });

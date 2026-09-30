@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { HttpException, NotFoundException } from '@nestjs/common';
 import {
   applyCommandToState,
   DiscoveredDevice,
@@ -11,6 +11,7 @@ import {
 } from '@nexahome/device-core';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
+import { encryptCredentials } from '../src/integrations/credential-crypto';
 import { DeviceCoreService } from '../src/device-core/device-core.service';
 import { DeviceGateway } from '../src/device-core/device.gateway';
 import type { PrismaService } from '../src/prisma/prisma.service';
@@ -76,11 +77,18 @@ describe('IntegrationManager', () => {
     expect(await manager.executeCommand('SHELLY', 'lampu', command)).toEqual({
       power: true,
     });
-    expect(shelly.executeCommand).toHaveBeenCalledWith('lampu', command);
+    // Tanpa kredensial, params ketiga tidak diisi — adapter tua tetap jalan.
+    expect(shelly.executeCommand).toHaveBeenCalledWith('lampu', command, undefined);
     expect(tasmota.executeCommand).not.toHaveBeenCalled();
 
-    await manager.executeCommand('TASMOTA', 'relay', command);
-    expect(tasmota.executeCommand).toHaveBeenCalledWith('relay', command);
+    await manager.executeCommand('TASMOTA', 'relay', command, {
+      username: 'admin',
+      password: 'rahasia',
+    });
+    expect(tasmota.executeCommand).toHaveBeenCalledWith('relay', command, {
+      username: 'admin',
+      password: 'rahasia',
+    });
     expect(shelly.executeCommand).toHaveBeenCalledTimes(1);
   });
 
@@ -116,6 +124,21 @@ describe('IntegrationManager', () => {
         state: { temperature: 21 },
       },
     ]);
+    // Tanpa kredensial integrasi, adapter memakai koneksi primary.
+    expect(mqtt.discoverDevices).toHaveBeenCalledWith(undefined);
+  });
+
+  it('discover meneruskan kredensial integrasi ke adapter', async () => {
+    const mqtt = stubAdapter('MQTT');
+    manager.register(mqtt);
+    const credentials = {
+      brokerUrl: 'mqtt://broker-kedua:1883',
+      username: 'u2',
+    };
+
+    await manager.discover('MQTT', credentials);
+
+    expect(mqtt.discoverDevices).toHaveBeenCalledWith(credentials);
   });
 
   it('discover melempar error saat tipe tidak terdaftar', async () => {
@@ -400,6 +423,7 @@ describe('DeviceCoreService', () => {
       mqtt,
       tasmota,
       gateway as unknown as DeviceGateway,
+      { get: () => 'kunci-uji-yang-panjang-sekali' } as ConfigService,
     );
   });
 
@@ -497,6 +521,110 @@ describe('DeviceCoreService', () => {
     expect(result.state).toEqual({ power: true });
   });
 
+  describe('kredensial integrasi diteruskan ke adapter', () => {
+    const PASSPHRASE = 'kunci-uji-yang-panjang-sekali';
+
+    const withIntegration = (config: unknown) => {
+      prisma.integration.findUnique.mockResolvedValue({
+        id: 'int_tasmota',
+        type: 'TASMOTA',
+        enabled: true,
+        config,
+      });
+      const adapter = stubAdapter('TASMOTA');
+      (adapter.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue({
+        power: true,
+      });
+      manager.register(adapter);
+      return adapter;
+    };
+
+    it('mengurai config terenkripsi lalu mengirimkannya ke adapter', async () => {
+      const adapter = withIntegration(
+        encryptCredentials(
+          { username: 'admin', password: 'rahasia-tasmota' },
+          PASSPHRASE,
+        ),
+      );
+
+      await service.executeCommand(deviceExternal, 'turn_on');
+
+      expect(adapter.executeCommand).toHaveBeenCalledWith(
+        'tasmota_relay_01',
+        { capability: 'power', value: true },
+        { username: 'admin', password: 'rahasia-tasmota' },
+      );
+    });
+
+    it('tidak pernah mengirim ciphertext mentah ke adapter', async () => {
+      const envelope = encryptCredentials({ password: 'rahasia' }, PASSPHRASE);
+      const adapter = withIntegration(envelope);
+
+      await service.executeCommand(deviceExternal, 'turn_on');
+
+      const passed = (adapter.executeCommand as ReturnType<typeof vi.fn>).mock
+        .calls[0][2];
+      // Yang sampai ke adapter adalah nilai asli, bukan amplop.
+      expect(passed).toEqual({ password: 'rahasia' });
+      expect(passed).not.toBe(envelope);
+      for (const field of ['v', 'alg', 'iv', 'tag', 'data', 'keys'] as const) {
+        expect(passed).not.toHaveProperty(field);
+      }
+    });
+
+    it('config plaintext lama diteruskan apa adanya (tidak mati setelah upgrade)', async () => {
+      const adapter = withIntegration({ username: 'lama', password: 'lama' });
+
+      await service.executeCommand(deviceExternal, 'turn_on');
+
+      expect(adapter.executeCommand).toHaveBeenCalledWith(
+        'tasmota_relay_01',
+        { capability: 'power', value: true },
+        { username: 'lama', password: 'lama' },
+      );
+    });
+
+    it('kunci yang salah membatalkan perintah, bukan mengirim tanpa kredensial', async () => {
+      // Melanjutkan tanpa kredensial akan mengirim perintah ke perangkat
+      // global — perangkat yang berbeda dari yang diminta pengguna.
+      const adapter = withIntegration(
+        encryptCredentials({ username: 'admin' }, 'kunci-yang-berbeda-sama-sekali'),
+      );
+
+      const error = await service
+        .executeCommand(deviceExternal, 'turn_on')
+        .catch((e: unknown) => e as HttpException);
+
+      expect(error.getStatus()).toBe(400);
+      expect(error.getResponse()).toMatchObject({
+        code: 'INTEGRATION_CREDENTIALS_INVALID',
+      });
+      expect(adapter.executeCommand).not.toHaveBeenCalled();
+    });
+
+    it('pesan error tidak membocorkan passphrase atau detail kripto', async () => {
+      const passphrase = 'kunci-yang-berbeda-sama-sekali';
+      withIntegration(encryptCredentials({ username: 'admin' }, passphrase));
+
+      const error = await service
+        .executeCommand(deviceExternal, 'turn_on')
+        .catch((e: unknown) => e as Error);
+
+      expect(error.message).not.toContain(passphrase);
+      expect(error.message).not.toContain('auth tag');
+    });
+
+    it('perangkat tanpa integrasi tidak menyentuh manager sama sekali', async () => {
+      prisma.integration.findUnique.mockResolvedValue(null);
+      const spy = vi.spyOn(manager, 'executeCommand');
+
+      const result = await service.executeCommand(deviceInternal, 'turn_on');
+
+      expect(result.state).toMatchObject({ power: true });
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
   it('perangkat eksternal dirutekan lewat manager sesuai tipe integration', async () => {
     prisma.integration.findUnique.mockResolvedValue({
       id: 'int_tasmota',
@@ -515,10 +643,11 @@ describe('DeviceCoreService', () => {
     expect(prisma.integration.findUnique).toHaveBeenCalledWith({
       where: { id: 'int_tasmota' },
     });
-    expect(adapter.executeCommand).toHaveBeenCalledWith('tasmota_relay_01', {
-      capability: 'power',
-      value: true,
-    });
+    expect(adapter.executeCommand).toHaveBeenCalledWith(
+      'tasmota_relay_01',
+      { capability: 'power', value: true },
+      undefined,
+    );
     expect(result).toEqual({
       deviceId: 'dev_external',
       state: { power: true, brightness: 77 },

@@ -107,6 +107,36 @@ Operasi `POST /integrations` (membuat integrasi) dan `PATCH /integrations/:id`
 hanya untuk pemilik rumah. Baca data integrasi boleh dilakukan anggota rumah
 dalam bentuk tersamarkan.
 
+### 5.1 Kredensial dipakai adapter, bukan hanya disimpan
+
+Envelope yang tersimpan didekripsi di server dan diteruskan ke adapter sebagai
+`AdapterCredentials` (`Record<string, unknown>` yang bebas). Adapter mencari
+kunci yang memang miliknya:
+
+| Tipe | Kunci yang dibaca | Dipakai untuk |
+| --- | --- | --- |
+| MQTT | `url` atau `brokerUrl`, `username`, `password` | broker tujuan |
+| Tasmota | `username`, `password` | HTTP Basic |
+
+Kalau kredensial yang dibaca integrasi tidak sama dengan `MQTT_BROKER_URL` /
+`MQTT_USERNAME` di env, adapter memakai koneksi sekali pakai ke broker
+integrasi tersebut lalu menutupnya. Konsekuensinya:
+
+- `executeCommand` ke broker kedua hanya mengembalikan state optimistis dari
+  cache broker utama — broker kedua tidak punya listener state milik adapter.
+- `getDeviceState` ke broker kedua membaca satu state lewat koneksi sekali
+  pakainya sendiri, dengan batas waktu 3 detik.
+- `discoverDevices` ke broker kedua mendengarkan pengumuman selama
+  `discoveryWindowMs` (default 3 detik). Broker hanya mengumuman saat
+  perangkat menyala, jadi hasil scan bisa kosong walaupun perangkat ada.
+
+Perilaku ini diuji di `apps/api/test/adapter-credentials.spec.ts`.
+
+Kunci yang salah atau envelope rusak **membatalkan** perintah dengan
+`INTEGRATION_CREDENTIALS_INVALID` (HTTP 400). Sengaja tidak dilanjutkan tanpa
+kredensial: perintah tanpa kredensial akan terkirim ke broker/perangkat global,
+yaitu perangkat yang berbeda dari yang diminta pengguna.
+
 ## 6. Menambah integrasi baru
 
 Checklist, urutan yang tidak bisa dilompati:

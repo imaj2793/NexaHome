@@ -1,4 +1,5 @@
 import {
+  AdapterCredentials,
   DiscoveredDevice,
   IntegrationAdapter,
   IntegrationCommand,
@@ -107,11 +108,16 @@ export class TasmotaAdapter implements IntegrationAdapter {
   async executeCommand(
     deviceId: string,
     command: IntegrationCommand,
+    credentials?: AdapterCredentials,
   ): Promise<Record<string, unknown>> {
     if (this.mode === 'mock') {
       return this.executeMock(deviceId, command);
     }
-    await this.httpRequest(deviceId, encodeURIComponent(this.toCmnd(command)));
+    await this.httpRequest(
+      deviceId,
+      encodeURIComponent(this.toCmnd(command)),
+      credentials,
+    );
     return this.commandToState(command);
   }
 
@@ -193,12 +199,31 @@ export class TasmotaAdapter implements IntegrationAdapter {
   private async httpRequest(
     deviceId: string,
     cmnd: string,
+    credentials?: AdapterCredentials,
   ): Promise<Record<string, unknown>> {
     const url = `http://${deviceId}/cm?cmnd=${cmnd}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(3000),
+      headers: authHeader(credentials),
+    });
     if (!res.ok) {
       throw new Error(`Tasmota HTTP ${res.status} dari ${deviceId}`);
     }
     return (await res.json()) as Record<string, unknown>;
   }
+}
+
+/**
+ * Header Basic Auth dari kredensial integrasi.
+ *
+ * Tasmota dengan WebPassword aktif menolak request tanpa header ini, jadi
+ * kredensial yang disimpan di `Integration.config` harus benar-benar dipakai.
+ * Tanpa username, tidak ada header yang dikirim — perangkat tanpa password
+ * tetap jalan seperti sebelumnya.
+ */
+function authHeader(credentials?: AdapterCredentials): Record<string, string> {
+  const username = typeof credentials?.username === 'string' ? credentials.username : '';
+  const password = typeof credentials?.password === 'string' ? credentials.password : '';
+  if (!username) return {};
+  return { Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}` };
 }

@@ -1,5 +1,6 @@
 import mqtt, { MqttClient } from 'mqtt';
 import {
+  AdapterCredentials,
   DiscoveredDevice,
   IntegrationAdapter,
   IntegrationCommand,
@@ -22,12 +23,37 @@ export interface MqttAdapterConfig {
   password?: string;
   /** Masa berlaku penemuan (ms). Default 120 detik. */
   discoveryTtlMs?: number;
+  /**
+   * Jendela waktu untuk mendengarkan pengumuman saat scan ke broker non-default
+   * (ms). Default 3 detik. Berbeda dengan TTL: ini batas menunggu broker,
+   * bukan batas umur entri cache.
+   */
+  discoveryWindowMs?: number;
 }
 
 /** Mode yang didukung adapter MQTT. */
 type MqttMode = 'mock' | 'mqtt';
 
 const MQTT_MODES: readonly MqttMode[] = ['mock', 'mqtt'];
+
+/** Timeout publish — tanpa ini MQTTv3 tidak pernah memberi callback error. */
+const PUBLISH_TIMEOUT_MS = 5_000;
+
+/** Batas menunggu state yang dikirim broker non-default. */
+const STATE_READ_TIMEOUT_MS = 3_000;
+
+/**
+ * Broker tujuan untuk satu perintah.
+ *
+ * `isPrimary: true` berarti pakai koneksi yang sudah dijaga adapter
+ * (subscribe state + discovery). Kalau tidak, koneksi dibuat sekali pakai.
+ */
+interface MqttTarget {
+  isPrimary: boolean;
+  url?: string;
+  username?: string;
+  password?: string;
+}
 
 /** Bentuk konfigurasi setelah dinormalisasi oleh constructor. */
 interface ResolvedConfig {
@@ -42,6 +68,8 @@ interface ResolvedConfig {
    * muncul di hasil scan sampai API di-restart.
    */
   discoveryTtlMs: number;
+  /** Jendela dengarkan pengumuman saat scan ke broker non-default (ms). */
+  discoveryWindowMs: number;
 }
 
 /** Benih perangkat mock (mode mock, tanpa network). */
@@ -87,6 +115,13 @@ const DEFAULT_MOCK_DEVICES: MockDeviceSeed[] = [
  *  - `mqtt`: terhubung ke broker via package `mqtt`, publish perintah ke topik
  *    `nexahome/devices/{deviceId}/set`, dan subscribe
  *    `nexahome/devices/{deviceId}/state` untuk membaca state perangkat.
+ *
+ * Kredensial per integrasi (lihat `AdapterCredentials`) memakai broker milik
+ * integrasi tersebut bila berbeda dari broker utama yang sudah dijaga
+ * adapter. Koneksi ke broker kedua dibuat sekali pakai per operasi, lalu
+ * ditutup — jadi state yang dikirim broker itu tidak meng-update state yang
+ * tersimpan di adapter, dan state optimistis sesudah `executeCommand`
+ * berasal dari cache primary, bukan dari broker kedua.
  */
 export class MqttAdapter implements IntegrationAdapter {
   readonly type: IntegrationType = 'MQTT';
@@ -121,6 +156,7 @@ export class MqttAdapter implements IntegrationAdapter {
       password: config.password,
       // `||` bukan `??`: env yang dikosongkan di .env tetap string "".
       discoveryTtlMs: Number(config.discoveryTtlMs) || 120_000,
+      discoveryWindowMs: Number(config.discoveryWindowMs) || 3_000,
     };
     if (this.config.mode === 'mqtt' && !this.config.url) {
       throw new Error(
@@ -146,7 +182,9 @@ export class MqttAdapter implements IntegrationAdapter {
     });
   }
 
-  async discoverDevices(): Promise<DiscoveredDevice[]> {
+  async discoverDevices(
+    credentials?: AdapterCredentials,
+  ): Promise<DiscoveredDevice[]> {
     // Mode mock sengaja TIDAK memalsukan hasil scan. Dulu ia mengembalikan
     // sensor fiktif dari mockState sehingga UI menampilkan perangkat yang
     // tidak ada. Kontrak baru: mock = tidak ada yang ditemukan; hanya mode
@@ -159,10 +197,91 @@ export class MqttAdapter implements IntegrationAdapter {
     // yang mengirim state. Entri yang basi dibuang — tanpa ini, perangkat yang
     // sudah dihapus/offline tetap muncul di hasil scan sampai API di-restart.
     this.pruneStale();
-    return [...this.discovered.values()].map((d) => ({
+
+    const target = this.resolveTarget(credentials);
+    const cached = [...this.discovered.values()].map((d) => ({
       ...d,
       state: { ...d.state },
     }));
+
+    // Broker non-default: cache primary tidak memuat perangkatnya, jadi
+    // hasilnya hanya pengumuman dari broker itu. Cache primary sengaja tidak
+    // dipakai sebagai cadangan: perangkat di sana milik integrasi lain.
+    if (!target.isPrimary) {
+      return this.discoverOnEphemeralConnection(target);
+    }
+
+    return cached;
+  }
+
+  /**
+   * Dengarkan pengumuman perangkat di broker non-default selama satu jendela
+   * waktu, lalu tutup koneksi.
+   *
+   * Broker hanya mengirim pengumuman saat perangkat menyala atau karena
+   * perangkat lain memintanya, jadi scan singkat hanya menemukan yang sedang
+   * muncul di dalam jendela tersebut. Ini batas nyata dari protocol yang
+   * dipakai, bukan hasil yang bisa diandalkan penuh.
+   */
+  private async discoverOnEphemeralConnection(
+    target: MqttTarget,
+  ): Promise<DiscoveredDevice[]> {
+    const client = mqtt.connect(
+      target.url!,
+      target.username && target.password
+        ? { username: target.username, password: target.password }
+        : {},
+    );
+    try {
+      return await new Promise<DiscoveredDevice[]>((resolve, reject) => {
+        const found = new Map<string, DiscoveredDevice>();
+        const finish = () => {
+          clearTimeout(timer);
+          client.off('message', onMessage);
+          client.off('error', onError);
+          resolve([...found.values()]);
+        };
+
+        const onMessage = (topic: string, payload: Buffer) => {
+          if (topic !== DISCOVERY_TOPIC) return;
+          try {
+            const data = JSON.parse(payload.toString()) as {
+              id?: string;
+              name?: string;
+              type?: string;
+              capabilities?: string[];
+              state?: Record<string, unknown>;
+            };
+            if (data.id) {
+              found.set(data.id, {
+                id: data.id,
+                name: data.name ?? data.id,
+                type: data.type ?? 'unknown',
+                capabilities: data.capabilities ?? [],
+                state: data.state ?? {},
+              });
+            }
+          } catch {
+            // Pengumuman rusak diabaikan agar scan tetap berjalan.
+          }
+        };
+
+        const onError = (err: Error) => {
+          clearTimeout(timer);
+          reject(err);
+        };
+
+        const timer = setTimeout(finish, this.config.discoveryWindowMs);
+
+        client.on('error', onError);
+        client.on('message', onMessage);
+        client.subscribe(DISCOVERY_TOPIC, (err) => {
+          if (err) onError(err);
+        });
+      });
+    } finally {
+      await this.closeEphemeralConnection(client);
+    }
   }
 
   /** Buang perangkat yang tidak lagi mengirim pesan dalam TTL. */
@@ -176,9 +295,19 @@ export class MqttAdapter implements IntegrationAdapter {
     }
   }
 
-  async getDeviceState(deviceId: string): Promise<Record<string, unknown>> {
+  async getDeviceState(
+    deviceId: string,
+    credentials?: AdapterCredentials,
+  ): Promise<Record<string, unknown>> {
     if (this.config.mode === 'mock') {
       return { ...(this.mockState.get(deviceId) ?? {}) };
+    }
+
+    const target = this.resolveTarget(credentials);
+    if (!target.isPrimary) {
+      // Broker non-default tidak punya listener state milik primary, jadi satu
+      // state dibaca lewat koneksi sekali pakai yang langsung ditutup.
+      return this.readStateOnce(target, deviceId);
     }
 
     this.ensureConnected();
@@ -189,27 +318,188 @@ export class MqttAdapter implements IntegrationAdapter {
   async executeCommand(
     deviceId: string,
     command: IntegrationCommand,
+    credentials?: AdapterCredentials,
   ): Promise<Record<string, unknown>> {
     if (this.config.mode === 'mock') {
       return this.executeMock(deviceId, command);
     }
 
-    this.ensureConnected();
     const payload = JSON.stringify({
       capability: command.capability,
       value: command.value,
     });
 
-    await new Promise<void>((resolve, reject) => {
-      this.client!.publish(setTopic(deviceId), payload, {}, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    const target = this.resolveTarget(credentials);
+    if (target.isPrimary) {
+      this.ensureConnected();
+      await this.publish(this.client!, setTopic(deviceId), payload);
+    } else {
+      // Broker lain: koneksi sekali pakai, lalu ditutup. Broker ini tidak
+      // punya listener state milik primary, jadi yang dikembalikan di bawah
+      // tetap state optimistis dari cache primary.
+      await this.publishOnEphemeralConnection(target, setTopic(deviceId), payload);
+    }
 
     // Optimistis: gabungkan perintah ke state terakhir yang diketahui.
     const current = this.stateByDevice.get(deviceId) ?? {};
     return { ...current, [command.capability]: command.value };
+  }
+
+  /**
+   * Publish dengan batas waktu.
+   *
+   * mqtt v5 tidak punya opsi `timeout` di publish, jadi batasnya dibuat di
+   * sini: tanpa ini, TCP yang menggantung akan menahan request HTTP sampai
+   * client atau proxy kehabisan waktu — bukan error yang bisa dilihat.
+   */
+  private publish(
+    client: MqttClient,
+    topic: string,
+    payload: string,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          new Error(
+            `Publish ke ${topic} tidak selesai dalam ${PUBLISH_TIMEOUT_MS}ms.`,
+          ),
+        );
+      }, PUBLISH_TIMEOUT_MS);
+
+      client.publish(topic, payload, { qos: 0 }, (err) => {
+        clearTimeout(timer);
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  /**
+   * Kredensial integrasi menentukan broker mana yang dipakai.
+   *
+   * Kalau tidak ada kredensial, atau kredensialnya menunjuk ke broker yang
+   * sama dengan koneksi utama (kasus umum: satu broker untuk semua rumah),
+   * perintah dikirim lewat koneksi yang sudah ada — tidak ada biaya tambahan.
+   */
+  private resolveTarget(credentials?: AdapterCredentials): MqttTarget {
+    const empty: MqttTarget = { isPrimary: true, url: undefined };
+    if (!credentials) return empty;
+
+    const url =
+      typeof credentials.brokerUrl === 'string'
+        ? credentials.brokerUrl
+        : typeof credentials.url === 'string'
+          ? credentials.url
+          : undefined;
+    const username =
+      typeof credentials.username === 'string' ? credentials.username : undefined;
+    const password =
+      typeof credentials.password === 'string' ? credentials.password : undefined;
+
+    // Tanpa URL berarti "broker yang sama, pakai kredensial yang disimpan".
+    const effectiveUrl = url ?? this.config.url;
+    if (!effectiveUrl) return empty;
+
+    const sameBroker =
+      effectiveUrl === this.config.url &&
+      (username ?? undefined) === this.config.username &&
+      (password ?? undefined) === this.config.password;
+
+    return sameBroker
+      ? empty
+      : { isPrimary: false, url: effectiveUrl, username, password };
+  }
+
+  /**
+   * Koneksi sekali pakai ke broker non-default.
+   *
+   * Dijalankan lalu ditutup di `finally` supaya koneksi tidak menumpuk tiap
+   * perintah. Kerugiannya: broker kedua tidak ikut di-subscribe, jadi
+   * `executeCommand` di sana hanya mengembalikan state optimistis dari cache
+   * primary. `getDeviceState` menutup celah itu dengan membaca satu state
+   * lewat koneksi sekali pakainya sendiri.
+   */
+  private async publishOnEphemeralConnection(
+    target: MqttTarget,
+    topic: string,
+    payload: string,
+  ): Promise<void> {
+    const client = mqtt.connect(
+      target.url!,
+      target.username && target.password
+        ? { username: target.username, password: target.password }
+        : {},
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const fail = (err: Error) => reject(err);
+        client.once('error', fail);
+        client.once('connect', () => resolve());
+      });
+      await this.publish(client, topic, payload);
+    } finally {
+      await this.closeEphemeralConnection(client);
+    }
+  }
+
+  /**
+   * Baca satu state dari broker non-default lewat koneksi sekali pakai.
+   *
+   * Kalau broker tidak menjawab dalam batas waktu, state kosong dikembalikan
+   * — sama seperti `waitForState` di primary — supaya perangkat yang tidak
+   * merespons tidak menggantung request.
+   */
+  private async readStateOnce(
+    target: MqttTarget,
+    deviceId: string,
+  ): Promise<Record<string, unknown>> {
+    const client = mqtt.connect(
+      target.url!,
+      target.username && target.password
+        ? { username: target.username, password: target.password }
+        : {},
+    );
+    try {
+      return await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const topic = stateTopic(deviceId);
+        const finish = (value: Record<string, unknown>) => {
+          clearTimeout(timer);
+          client.off('message', onMessage);
+          client.off('error', onError);
+          resolve(value);
+        };
+
+        const onMessage = (incoming: string, payload: Buffer) => {
+          if (incoming !== topic) return;
+          try {
+            finish(JSON.parse(payload.toString()) as Record<string, unknown>);
+          } catch {
+            // Pesan rusak diabaikan; bukan alasan gagalkan seluruh pembacaan.
+          }
+        };
+
+        const onError = (err: Error) => {
+          clearTimeout(timer);
+          reject(err);
+        };
+
+        const timer = setTimeout(() => finish({}), STATE_READ_TIMEOUT_MS);
+
+        client.on('error', onError);
+        client.on('message', onMessage);
+        client.subscribe(topic, (err) => {
+          if (err) onError(err);
+        });
+      });
+    } finally {
+      await this.closeEphemeralConnection(client);
+    }
+  }
+
+  private closeEphemeralConnection(client: MqttClient): Promise<void> {
+    return new Promise<void>((resolve) => {
+      client.end(false, {}, () => resolve());
+    });
   }
 
   // ── mode mock ──────────────────────────────────────────

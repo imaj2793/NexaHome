@@ -1,4 +1,5 @@
 import {
+  AdapterCredentials,
   DiscoveredDevice,
   IntegrationAdapter,
   IntegrationCommand,
@@ -32,20 +33,24 @@ export class IntegrationManager {
     type: IntegrationType,
     deviceId: string,
     command: IntegrationCommand,
+    credentials?: AdapterCredentials,
   ): Promise<Record<string, unknown>> {
     const adapter = this.adapters.get(type);
     if (!adapter) {
       throw new Error(`Tidak ada integration untuk tipe "${type}".`);
     }
-    return adapter.executeCommand(deviceId, command);
+    return adapter.executeCommand(deviceId, command, credentials);
   }
 
-  async discover(type: IntegrationType): Promise<DiscoveredDevice[]> {
+  async discover(
+    type: IntegrationType,
+    credentials?: AdapterCredentials,
+  ): Promise<DiscoveredDevice[]> {
     const adapter = this.adapters.get(type);
     if (!adapter) {
       throw new Error(`Tidak ada integration untuk tipe "${type}".`);
     }
-    return adapter.discoverDevices();
+    return adapter.discoverDevices(credentials);
   }
 
   /** Discovery gabungan dari SEMUA integration yang terdaftar. */

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -6,6 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import {
+  type AdapterCredentials,
   applyCommandToState,
   humanizeCommand,
   IntegrationManager,
@@ -13,6 +15,7 @@ import {
 } from '@nexahome/device-core';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
+import { ConfigService } from '@nestjs/config';
 import { ApiError } from '../common/errors/api-error';
 import { ErrorCode } from '../common/errors/error-codes';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,6 +24,10 @@ import {
   assertValueInRange,
   toAdapterError,
 } from './command-errors';
+import {
+  decryptCredentials,
+  isCredentialEnvelope,
+} from '../integrations/credential-crypto';
 import { DeviceGateway } from './device.gateway';
 
 /** Bentuk device minimal yang dibutuhkan untuk mengeksekusi perintah. */
@@ -56,7 +63,13 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
     private readonly mqtt: MqttAdapter,
     private readonly tasmota: TasmotaAdapter,
     private readonly gateway: DeviceGateway,
+    private readonly config: ConfigService,
   ) {}
+
+  /** Passphrase enkripsi kredensial; sama dengan yang dipakai IntegrationsService. */
+  private passphrase(): string {
+    return this.config.get<string>('INTEGRATION_CREDENTIALS_KEY') ?? '';
+  }
 
   async onModuleInit(): Promise<void> {
     this.manager.register(this.mqtt);
@@ -86,6 +99,38 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     await this.mqtt.disconnect();
     await this.tasmota.disconnect();
+  }
+
+  /**
+   * Kredensial integrasi dalam bentuk yang bisa dibaca adapter.
+   *
+   * `Integration.config` disimpan terenkripsi, jadi harus diurdai di sini —
+   * satu-satunya tempat di server yang berubah dari ciphertext menjadi nilai
+   * asli, dan hasilnya langsung dipakai adapter tanpa pernah masuk respons.
+   *
+   * Config lama yang belum dienkripsi diteruskan apa adanya supaya integrasi
+   * yang sudah jalan tidak mati setelah upgrade.
+   */
+  private credentialsOf(config: unknown): AdapterCredentials | undefined {
+    if (!config || typeof config !== 'object') return undefined;
+    if (!isCredentialEnvelope(config)) {
+      return config as AdapterCredentials;
+    }
+    try {
+      return decryptCredentials(config, this.passphrase());
+    } catch (error) {
+      // Gagal baca = gagal dijalankan. Melanjutkan tanpa kredensial akan
+      // mengirim perintah ke broker atau perangkat global, yaitu
+      // perangkat yang berbeda dari yang diminta pengguna.
+      this.logger.error(
+        `Kredensial integrasi tidak bisa dibaca: ${(error as Error).message}`,
+      );
+      throw new BadRequestException({
+        code: 'INTEGRATION_CREDENTIALS_INVALID',
+        message:
+          'Kredensial integrasi tidak bisa dibaca. Periksa ulang konfigurasi integration.',
+      });
+    }
   }
 
   async executeCommand(
@@ -129,11 +174,16 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
     let external = false;
 
     if (integration && integration.enabled && device.externalId) {
+      // Di luar try: kegagalan baca kredensial adalah masalah konfigurasi,
+      // bukan kegagalan adapter, jadi tidak boleh diterjemahkan jadi
+      // INTEGRATION_COMMAND_FAILED yang menutupi penyebabnya.
+      const credentials = this.credentialsOf(integration.config);
       try {
         const result = await this.manager.executeCommand(
           integration.type,
           device.externalId,
           command,
+          credentials,
         );
         nextState = { ...current, ...result };
         external = true;
@@ -175,6 +225,6 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
     if (!integration) {
       throw new NotFoundException('Integration tidak ditemukan.');
     }
-    return this.manager.discover(integration.type);
+    return this.manager.discover(integration.type, this.credentialsOf(integration));
   }
 }

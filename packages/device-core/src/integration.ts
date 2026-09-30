@@ -15,6 +15,19 @@ export interface IntegrationCommand {
   value: unknown;
 }
 
+/**
+ * Kredensial milik satu integrasi, sudah didekripsi di sisi server.
+ *
+ * Nilainya berasal dari `Integration.config` (lihat IntegrationsService),
+ * jadi bentuknya bebas — adapter cukup mencari kunci yang dia miliki:
+ * `url`/`brokerUrl` + `username` + `password` untuk MQTT, `username` +
+ * `password` untuk HTTP auth Tasmota.
+ *
+ * Params opsional supaya adapter yang tidak butuh kredensial (atau versi
+ * lama) tetap sah secara tipe.
+ */
+export type AdapterCredentials = Record<string, unknown>;
+
 /** Perangkat fisik yang ditemukan oleh sebuah integration (blueprint §8). */
 export interface DiscoveredDevice {
   id: string;
@@ -40,10 +53,14 @@ export interface IntegrationAdapter {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
 
-  discoverDevices(): Promise<DiscoveredDevice[]>;
-  getDeviceState(deviceId: string): Promise<Record<string, unknown>>;
+  discoverDevices(credentials?: AdapterCredentials): Promise<DiscoveredDevice[]>;
+  getDeviceState(
+    deviceId: string,
+    credentials?: AdapterCredentials,
+  ): Promise<Record<string, unknown>>;
   executeCommand(
     deviceId: string,
     command: IntegrationCommand,
+    credentials?: AdapterCredentials,
   ): Promise<Record<string, unknown>>;
 }
