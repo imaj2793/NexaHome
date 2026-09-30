@@ -28,7 +28,7 @@ perlu migration + penyesuaian nilai yang sudah tersimpan.
 | `type` | `String` | user | tidak divalidasi |
 | `capabilities` | `String[]` | user/adapter | daftar kapabilitas |
 | `state` | `Json` | adapter/perintah | state terakhir, bentuk bebas |
-| `roomId` | `String?` | user | relasi ke `Room` |
+| `roomId` | `String?` | user | relasi ke `Room` (wajib satu rumah dengan device) |
 | `homeId` | `String` | user | relasi ke `Home` |
 
 **Field yang tidak ada**: `brand`, `model`, `protocol`, `ipAddress`, `port`,

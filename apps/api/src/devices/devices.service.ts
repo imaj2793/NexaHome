@@ -52,7 +52,8 @@ export class DevicesService {
   }
 
   async create(userId: string, dto: CreateDeviceDto) {
-    await this.assertHomeOwned(userId, dto.homeId);
+    const home = await this.assertHomeOwned(userId, dto.homeId);
+    await this.assertRoomInHome(dto.roomId, home.id);
     return this.prisma.device.create({
       data: {
         name: dto.name,
@@ -68,7 +69,11 @@ export class DevicesService {
   }
 
   async update(userId: string, id: string, dto: UpdateDeviceDto) {
-    await this.assertDeviceOwned(userId, id);
+    const device = await this.assertDeviceOwned(userId, id);
+    // `roomId` harus milik rumah yang sama. Tanpa cek ini, perangkat bisa
+    // diarahkan ke room rumah orang lain; karena respons device menyertakan
+    // `room`, nama room milik orang lain ikut terbaca di sini.
+    await this.assertRoomInHome(dto.roomId, device.homeId);
     return this.prisma.device.update({
       where: { id },
       data: {
@@ -108,6 +113,24 @@ export class DevicesService {
     });
     if (!home) throw new NotFoundException('Home tidak ditemukan.');
     return home;
+  }
+
+  /**
+   * Pastikan room (kalau ada) berada di rumah yang sama dengan perangkat.
+   *
+   * Room di rumah lain ditolak dengan 404, sama seperti sumber daya milik
+   * rumah orang lain: Existence-nya tidak perlu dikonfirmasi.
+   */
+  private async assertRoomInHome(
+    roomId: string | null | undefined,
+    homeId: string,
+  ): Promise<void> {
+    if (roomId === undefined || roomId === null) return;
+    const room = await this.prisma.room.findFirst({
+      where: { id: roomId, homeId },
+      select: { id: true },
+    });
+    if (!room) throw new NotFoundException('Room tidak ditemukan.');
   }
 
   private async assertDeviceOwned(userId: string, id: string) {

@@ -5,7 +5,8 @@ import type { DeviceCoreService } from '../device-core/device-core.service';
 import type { PrismaService } from '../prisma/prisma.service';
 
 const makePrisma = () => ({
-  home: { findFirst: vi.fn() },
+  home: { findFirst: vi.fn(), count: vi.fn() },
+  room: { findFirst: vi.fn() },
   device: {
     findMany: vi.fn(),
     findFirst: vi.fn(),
@@ -46,6 +47,9 @@ describe('DevicesService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = makePrisma();
+    // Default: room yang dirujuk ada di rumah mana pun. Test yang menguji
+    // penolakan menimpanya dengan null.
+    prisma.room.findFirst.mockResolvedValue({ id: 'room_1' });
     deviceCore = makeDeviceCore();
     service = new DevicesService(
       prisma as unknown as PrismaService,
@@ -248,6 +252,54 @@ describe('DevicesService', () => {
         service.update('usr_2', 'dev_1', { name: 'X' }),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.device.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('room harus milik rumah yang sama', () => {
+    it('create menolak room dari rumah lain', async () => {
+      prisma.home.findFirst.mockResolvedValue({ id: 'home_1' });
+      prisma.room.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create('usr_1', {
+          name: 'Lampu',
+          type: 'light',
+          homeId: 'home_1',
+          roomId: 'room_milik_orang_lain',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.device.create).not.toHaveBeenCalled();
+    });
+
+    it('update menolak room dari rumah lain', async () => {
+      prisma.device.findFirst.mockResolvedValue(deviceRow);
+      prisma.room.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update('usr_1', 'dev_1', { roomId: 'room_milik_orang_lain' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.device.update).not.toHaveBeenCalled();
+    });
+
+    it('cek room memakai homeId perangkat, bukan rumah milik pengguna', async () => {
+      prisma.device.findFirst.mockResolvedValue(deviceRow);
+
+      await service.update('usr_1', 'dev_1', { roomId: 'room_1' });
+
+      expect(prisma.room.findFirst).toHaveBeenCalledWith({
+        where: { id: 'room_1', homeId: 'home_1' },
+        select: { id: true },
+      });
+    });
+
+    it('roomId null tetap berarti melepas ruangan tanpa cek', async () => {
+      prisma.device.findFirst.mockResolvedValue(deviceRow);
+      prisma.device.update.mockResolvedValue({ ...deviceRow, roomId: null });
+
+      await service.update('usr_1', 'dev_1', { roomId: null });
+
+      expect(prisma.room.findFirst).not.toHaveBeenCalled();
+      expect(prisma.device.update).toHaveBeenCalled();
     });
   });
 

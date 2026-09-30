@@ -73,7 +73,32 @@ Dua detail implementasi yang mudah salah dan sudah ditangani:
 - Semua emit ke room, tidak ada broadcast global. Client hanya menerima event
   rumah yang di-join-nya.
 
-## 5. Yang belum ada
+## 5. Yang diuji otomatis
+
+`apps/api/test/security.e2e-spec.ts` menjalankan verifikasi berikut terhadap
+API sungguhan (bukan mock), jadi regresinya tertangkap CI:
+
+| Area | Yang dijaga |
+| --- | --- |
+| Handshake WS | tanpa token, token rusak, token user yang sudah dihapus, token via query string |
+| Isolasi WS | `FORBIDDEN` saat join room orang lain; event rumah lain tidak diterima |
+| Isolasi HTTP | 404 untuk device, room, dan integrasi milik rumah orang lain; state tidak berubah setelah perintah ditolak |
+| Room | device tidak bisa diarahkan ke room rumah lain (baik saat create maupun update) |
+| Kredensial | tidak pernah kembali apa adanya; anggota boleh baca tapi tidak boleh tulis |
+
+Dua hal yang ditemukan test ini dan sudah diperbaiki:
+
+- `DevicesService.update` menulis `roomId` tanpa memverifikasi rumah. Perangkat
+  bisa diarahkan ke room milik orang lain, dan karena respons device
+  menyertakan `room`, nama room itu ikut terbaca. `create` punya masalah yang
+  sama.
+- API menjawab 404 (bukan 403) untuk sumber daya milik rumah orang lain, dengan
+  sengaja supaya keberadaan sumber daya tidak terkonfirmasi.
+
+Tidak ada route `GET /integrations/:id`; integrasi hanya bisa dibaca lewat
+`GET /integrations`.
+
+## 6. Yang belum ada
 
 - Refresh token disimpan hashed di database dengan rotasi (acak lagi setiap
   refresh) dan dicabut saat logout. Yang **belum**: deteksi reuse token —
@@ -83,7 +108,7 @@ Dua detail implementasi yang mudah salah dan sudah ditangani:
 - Role `ADMIN` di `HomeMemberRole` ada, tapi belum ada operasi yang
   membedakannya dari `USER`. Saat ini keanggotaan bersifat ya/tidak.
 
-## 6. Referensi kode
+## 7. Referensi kode
 
 - `apps/api/src/auth/` — strategy, guard, service rotasi token.
 - `apps/api/src/common/errors/` — kontrak error §13.

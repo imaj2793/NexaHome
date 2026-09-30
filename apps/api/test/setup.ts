@@ -14,4 +14,8 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL ??
   'postgresql://nexahome:nexahome@localhost:5432/nexahome?schema=public';
 process.env.AI_PROVIDER = process.env.AI_PROVIDER ?? 'mock';
+// Kunci tetap dipakai untuk enkripsi kredensial integrasi, tapi di sini
+// nilainya hardcoded dan hanya berlaku untuk test — bukan rahasia produksi.
+process.env.INTEGRATION_CREDENTIALS_KEY =
+  process.env.INTEGRATION_CREDENTIALS_KEY ?? 'test-kredensial-tidak-untuk-produksi';
 process.env.MQTT_MODE = process.env.MQTT_MODE ?? 'mock';
