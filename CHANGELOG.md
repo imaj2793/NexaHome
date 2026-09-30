@@ -14,6 +14,41 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ## [Unreleased]
 
+### Fixed
+
+- **Scan tidak lagi memalsukan perangkat.** Adapter MQTT dan Tasmota dalam mode
+  `mock` kini mengembalikan array kosong. Sebelumnya scan menampilkan
+  "WiZ Bulb Ruang Tamu", "Tasmota Relay", dan sensor fiktif yang tidak ada di
+  jaringan mana pun. Mode `mock` berarti "tidak ada koneksi", bukan simulator.
+- **AI tidak lagi memakai ID perangkat hardcode.** `MockAIProvider` mengembalikan
+  `device_living_light`/`device_bedroom_light` yang tidak ada di database, sehingga
+  setiap perintah ke perangkat gagal dengan "Perangkat tidak ditemukan".
+  Sekarang `NexaService` mengirim katalog perangkat milik user ke provider
+  (`AIProvider.chat({ devices })`), dan provider AI OpenAI-compatible
+  menyisipkannya ke system prompt agar model memakai `device_id` yang benar.
+- **Perintah tidak terkirim berulang.** Mock provider mengulang tool call yang
+  sama pada setiap iterasi loop, sehingga satu perintah "nyalakan lampu" dikirim
+  ke broker 4 kali. Sekarang provider berhenti dan menjawab final begitu hasil
+  tool masuk.
+- **Kegagalan tool Nexa dapat didiagnosis.** Error dari tool dicatat di log
+  (`NexaToolsService`) dan alasan sebenarnya ditampilkan ke user, bukan pesan
+  generik "Maaf, perintah belum selesai diproses."
+
+### Removed
+
+- **Integrasi WiZ dihapus** (`@nexahome/integration-wiz`, enum `IntegrationType.WIZ`).
+  Protokol UDP port 38899 hanya berfungsi bila API berjalan langsung di jaringan
+  lokal: dari dalam container, broadcast keluar tetapi balasan unicast dari lampu
+  tidak sampai (NAT), sehingga scan selalu kosong dan tidak bisa diverifikasi
+  dengan perangkat nyata. Menghapus integrasi ini lebih jujur daripada
+  menampilkan data simulasi. Migrasi `20260929210000_remove_wiz_integration`
+  membersihkan integrasi, perangkat, scene/automation action terkait, dan nilai
+  enum (PostgreSQL tidak mendukung `DROP VALUE`, jadi tipe dibuat ulang).
+- **Data perangkat dummy dari seed.** `pnpm db:seed` kini hanya membuat akun
+  owner, home, 3 ruangan, dan integrasi MQTT/Tasmota. Data demo dipindahkan ke
+  `pnpm db:seed:demo` (opsional) dan diberi label "(Demo)".
+
+
 ### Added
 
 - **Auth**: refresh token dengan rotasi + deteksi reuse, endpoint `POST /api/auth/refresh`
@@ -26,7 +61,7 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 - **`docker-compose.yml`**: full stack `postgres` + `mqtt` (Eclipse Mosquitto) +
   `migrate` + `api` + `web` dengan healthcheck dan dependency ordering.
 - **Integrations**: helper `parseMode` yang gagal cepat untuk mode tidak dikenal
-  (`MQTT_MODE=mock|mqtt`, `TASMOTA_MODE=mock|http`, `WIZ_MODE=mock|udp`).
+  (`MQTT_MODE=mock|mqtt`, `TASMOTA_MODE=mock|http`).
 - **Ketahanan integrasi**: kegagalan connect adapter tidak lagi menggagalkan boot
   API; error dicatat lewat logger dan integrasi lain tetap berfungsi.
 - **CI/CD**: workflow `ci.yml` (lint, typecheck, test, build, audit, build image

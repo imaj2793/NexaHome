@@ -100,7 +100,7 @@ Pengguna
            ▼
 ┌──────────────────────┐
 │   Integration Layer  │
-│ WiZ · MQTT · Tasmota │
+│ MQTT · Tasmota · mDNS   │
 └──────────┬───────────┘
            │
            ▼
@@ -131,7 +131,7 @@ Pemisahan ini membuat:
 | **Backend** | NestJS 12 · Passport · JWT · WebSocket · Socket.IO |
 | **Database** | PostgreSQL 16 · Prisma 6 |
 | **AI** | `@nexahome/ai` · OpenAI-compatible Provider · DeepSeek · Mock Provider |
-| **IoT** | WiZ UDP · MQTT · Tasmota |
+| **IoT** | MQTT · Tasmota HTTP · mDNS |
 | **Device Core** | `@nexahome/device-core` |
 | **Monorepo** | pnpm Workspaces · Turborepo |
 | **Infrastruktur** | Docker Compose · PostgreSQL · MQTT Broker |
@@ -314,16 +314,47 @@ Provider AI tetap dapat diganti melalui abstraksi provider tanpa mengubah NexaHo
 
 ## Integrasi Perangkat
 
-| Integrasi | Protokol | Status |
-| --- | --- | --- |
-| **WiZ** | UDP | Selesai |
-| **MQTT** | MQTT | Selesai |
-| **Tasmota** | MQTT | Dalam Pengembangan |
-| **Universal Discovery** | mDNS / SSDP / BLE | Riset |
+| Integrasi | Protokol | Cara ditemukan | Status |
+| --- | --- | --- | --- |
+| **MQTT** | MQTT broker |_TOPIC_ broadcast + state | Selesai |
+| **Tasmota** | HTTP (`Status 11`) | mDNS `_tasmota._tcp`, atau manual | Selesai |
+| **Universal Discovery** | mDNS | mDNS lintas vendor | Sebagian (mDNS saja) |
+| SSDP / BLE | — | — | Riset |
 
-Arsitektur integrasi menggunakan kontrak `IntegrationAdapter`.
+Arsitektur integrasi menggunakan kontrak `IntegrationAdapter`. Integrasi baru
+bisa ditambahkan tanpa mengubah business logic utama NexaHome Core.
 
-Dengan pendekatan ini, integrasi perangkat baru dapat ditambahkan tanpa harus mengubah business logic utama NexaHome Core.
+### Cara menambah perangkat (scan yang jujur)
+
+Scan **hanya menampilkan perangkat yang benar-benar ada di jaringan Anda**.
+Tidak ada data simulasi: mode `mock` berarti "tidak ada koneksi", dan scan
+di mode itu selalu kosong.
+
+1. **MQTT** — perangkat (atau bridge Tasmota → MQTT) mengumumkan dirinya:
+
+   ```bash
+   docker compose exec mqtt mosquitto_pub -h 127.0.0.1 \
+     -t 'nexahome/discovery' \
+     -m '{"id":"relay_dapur","name":"Relay Dapur","type":"switch","capabilities":["power"],"state":{"power":false}}'
+   ```
+
+   Lalu buka **Devices → Scan**. Untuk<sup> state</sup> berkelanjutan, perangkat
+   juga mengirim state berkala ke `nexahome/devices/<id>/state` dan menerima
+   perintah di `nexahome/devices/<id>/set`.
+
+2. **mDNS** — perangkat Tasmota/ESPHome/Shelly yang menyiarkan `_tasmota._tcp`
+   dsb. Terlihat bila API berjalan di jaringan yang sama dengan perangkat
+   (jalankan API secara native, atau Docker dengan `--network host` di Linux).
+   Dari container bridge, multicast sering tidak menembus ke LAN.
+
+3. **Manual** — **Devices → Add device** dengan nama, tipe, dan kapabilitas.
+   Untuk Tasmota, isi IP perangkat agar status bisa dibaca.
+
+> **Kenapa WiZ dihapus?** Protokol UDP WiZ (port 38899) hanya bekerja bila API
+> berjalan langsung di jaringan lokal: dari container, broadcast keluar tetapi
+> balasan unicast dari lampu tidak sampai (NAT). Karena tidak bisa diverifikasi
+> dengan perangkat nyata, integrasi ini dihapus daripada menampilkan data
+> palsu.
 
 ---
 
@@ -376,6 +407,19 @@ Isi database dengan data awal:
 
 ```bash
 pnpm db:seed
+```
+
+Seed membuat akun owner, satu home, dan 3 ruangan — **tanpa perangkat palsu**.
+Untuk mencoba UI dengan data demo yang jelas berlabel "(Demo)":
+
+```bash
+pnpm db:seed:demo        # pasang data demo
+pnpm db:seed:demo:reset  # hapus lagi
+```
+
+```bash
+# (opsional) seed dasar di dalam Docker:
+docker compose run --rm migrate pnpm exec prisma db seed
 ```
 
 Jalankan development server:
@@ -471,11 +515,11 @@ NexaHome/
 | Tahap | Lingkup | Status |
 | --- | --- | --- |
 | **1 — Foundation** | Monorepo, autentikasi, home, ruangan, perangkat, dashboard | Selesai |
-| **2 — Smart Home** | Device Core, integrasi WiZ, WebSocket | Selesai |
+| **2 — Smart Home** | Device Core, integrasi MQTT/Tasmota, WebSocket | Selesai |
 | **3 — Nexa AI** | Provider abstraction, tool calling, TTS | Selesai |
 | **4 — Visual Nexa** | Delapan ekspresi dan animasi realtime | Selesai |
 | **5 — Automation** | Scene, scheduler, trigger, dan action | Selesai |
-| **6 — IoT** | Integrasi MQTT | Selesai |
+| **6 — IoT** | Integrasi MQTT + discovery berbasis topik | Selesai |
 | **7 — Advanced** | Notifikasi dan pemantauan energi | Selesai |
 | **8 — v1.0** | Dokumentasi dan security hardening | Selesai |
 | **9 — Full Voice** | DeepSeek live, STT lokal, wake word | Dalam Pengembangan |

@@ -49,7 +49,6 @@ packages/ai       Chat provider (mock/deepseek/openai)
 packages/types    Shared TypeScript types
 packages/device-core     Routing perintah ke adapter integrasi
 packages/integration-mqtt / -tasmota   Adapter perangkat
-integrations/wiz  Adapter WiZ (UDP)
 ```
 
 Aturan praktis:

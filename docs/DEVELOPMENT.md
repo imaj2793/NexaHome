@@ -56,7 +56,6 @@ pnpm dev                         # web (3000) + api (3001)
 | `WHISPER_MODEL` | — | path model ggml (wajib untuk STT) |
 | `WHISPER_LANG` | `id` | bahasa transkripsi |
 | `MQTT_URL` | `mqtt://localhost:1883` | broker MQTT |
-| `WIZ_MODE` | `mock` | `mock` / `udp` |
 
 ---
 
@@ -126,8 +125,7 @@ packages/
   device-core/            # @nexahome/device-core — kontrak IntegrationAdapter + manager
   ai/                     # @nexahome/ai — provider chat + speech (mock/openai-compatible)
   integration-mqtt/       # @nexahome/integration-mqtt — adapter MQTT
-integrations/
-  wiz/                    # @nexahome/integration-wiz — adapter WiZ
+  integration-tasmota/    # @nexahome/integration-tasmota — adapter Tasmota (HTTP)
 docs/                     # PRD, API, DEVELOPMENT (ini)
 models/                   # model ggml STT (gitignored)
 ```
@@ -154,7 +152,7 @@ export class MyAdapter implements IntegrationAdapter {
 
 3. Daftarkan di `apps/api/src/device-core/device-core.module.ts` (factory provider, baca config dari env).
 4. Tambah ke `DeviceCoreService.onModuleInit()` (register + connect).
-5. Mode `mock` untuk dev tanpa perangkat fisik (pola lihat `integration-wiz` dan `integration-mqtt`).
+5. Mode `mock` untuk dev tanpa broker (pola lihat `integration-mqtt`). Ingat: mock berarti 0 perangkat, bukan data simulasi.
 
 ---
 

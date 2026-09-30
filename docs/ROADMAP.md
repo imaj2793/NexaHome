@@ -38,7 +38,7 @@ NexaHome dianggap siap distribusi bila:
 1. [ ] **API** — pasang Jest + supertest (NestJS default):
    - Unit: `auth`, `devices`, `rooms`, `scenes`, `automations`, `notifications`, `energy`.
    - Unit: `nexa-tools` (setiap tool + safety layer), `nexa.service` (loop tool-calling).
-   - Unit: adapters (`wiz`, `mqtt`, `tasmota`) dalam mode `mock`.
+   - Unit: adapters (`mqtt`, `tasmota`) memakai stub/mode mock.
    - Unit: `discovery` (mDNS hasil mock, routing vendor → integration).
 2. [ ] **Web** — pasang Vitest + React Testing Library:
    - `nexa-robot` (8 state → ekspresi benar), `device-card`, `add-device-modal`.
