@@ -6,6 +6,13 @@ NexaHome adalah **open-source smart home platform** yang dirancang untuk menghub
 
 NexaHome menggunakan **Nexa AI** sebagai asisten berbasis suara yang memanfaatkan **AI API dari model yang sudah tersedia**, sehingga tidak perlu melakukan training LLM sendiri.
 
+> **Status (Sep 2026):** Ini dokumen **ide/visi**, bukan daftar fitur yang ada.
+> Untuk apa yang benar-benar terpasang, baca dokumen di `docs/`, terutama
+> bagian "Yang sengaja tidak ada" di
+> [`docs/architecture.md`](docs/architecture.md). Yang tidak ada di kode hari ini:
+> **WiZ** (dihapus pada commit `23d200d`), SSDP, BLE, Google Home, Tuya,
+> SmartThings, dan infrared.
+
 ---
 
 ## 🎯 Tujuan

@@ -56,6 +56,43 @@ pnpm dev                         # web (3000) + api (3001)
 | `WHISPER_MODEL` | — | path model ggml (wajib untuk STT) |
 | `WHISPER_LANG` | `id` | bahasa transkripsi |
 | `MQTT_URL` | `mqtt://localhost:1883` | broker MQTT |
+| `MQTT_USERNAME` | — | username broker (kosong = anonymous) |
+| `MQTT_PASSWORD` | — | password broker |
+| `MQTT_MODE` | `auto` | `auto` / `mqtt` / `mock`. `mock` = scan mengembalikan `[]` |
+| `MQTT_DISCOVERY_TTL_MS` | `120000` | masa berlaku state/announce retained (2 menit) |
+| `INTEGRATION_CREDENTIALS_KEY` | — | **wajib**: passphrase min. 16 karakter, diperpanjang ke kunci 32 byte lewat scrypt |
+
+### Membuat `INTEGRATION_CREDENTIALS_KEY`
+
+API menolak startup tanpa key itu, dan menolak yang kurang dari 16 karakter:
+
+```bash
+openssl rand -base64 32   # atau: openssl rand -hex 32
+```
+
+Nilainya dipakai sebagai **passphrase** yang diperpanjang ke kunci 32 byte
+lewat scrypt, lalu dipakai sebagai kunci AES-256-GCM — jadi bentuk teksnya
+bebas selama panjangnya cukup.
+
+Yang penting: nilainya tidak boleh berubah setelah kredensial tersimpan.
+Kalau diganti, config lama tidak bisa didekripsi lagi (server tetap jalan,
+tapi kredensialnya tidak terbaca). Simpan salinannya di tempat aman — ini
+kunci enkripsi, bukan token yang bisa di-reset.
+
+---
+
+## 3b. Ringkasan kontrak error
+
+Semua endpoint memakai satu bentuk error (lihat
+[API.md](API.md#kontrak-error)):
+
+```json
+{ "success": false, "error": { "code": "DEVICE_OFFLINE", "message": "…" } }
+```
+
+Web client (`apps/web/lib/api.ts`) membacanya lewat `ApiError.code` /
+`ApiError.message`, jadi kode error bisa dipakai untuk logika UI tanpa
+mengurai string pesan.
 
 ---
 

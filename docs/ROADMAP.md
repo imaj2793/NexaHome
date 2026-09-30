@@ -1,7 +1,16 @@
 # NexaHome — Roadmap Distribusi v1.0
 
 > Tahapan menuju **siap pakai & siap distribusi**. Living checklist — centang saat selesai.
-> Status dasar: **Phase 1–8 selesai** (fitur inti), **build masih merah** (`pnpm run typecheck` gagal di modul `discovery`), **0 test**, belum ada LICENSE/CI/Dockerfile produksi.
+>
+> **Status per 30 Sep 2026:** `lint`, `typecheck`, `test`, `build` hijau.
+> **453 test** lolos (API 370 + Web 83). LICENSE, CI, Dockerfile produksi,
+> docker-compose full, dan dokumentasi sudah ada. Yang tersisa terutama:
+> verifikasi perangkat nyata, live AI, serta deteksi reuse refresh token dan
+> rate limit global.
+
+> Catatan integrasi: **WiZ tidak ada** dan tidak akan ditambahkan tanpa
+> dokumentasi resmi + perangkat nyata untuk verifikasi. Lihat
+> [integrations.md](integrations.md#4-status-integrasi-lain).
 
 ---
 
@@ -17,33 +26,34 @@ NexaHome dianggap siap distribusi bila:
 
 ---
 
-## Fase A — Stabilkan codebase (build hijau + commit)
+## Fase A — Stabilkan codebase (build hijau + commit) — ✅ selesai
 
-1. [ ] **Fix 3 error typecheck** di modul `discovery` (belum dicommit):
+1. [x] **Fix 3 error typecheck** di modul `discovery` (sudah selesai):
    - `apps/api/src/discovery/discovery.controller.ts:21` — `ConnectDeviceDto.device` tidak cocok dengan `ConnectDeviceInput` (`capabilities?: string[]` vs `string[]`). Samakan tipe (buat `ConnectDeviceInput.device` terima capabilities optional, atau samakan DTO dengan shape `DiscoveredDevice`).
    - `apps/api/src/discovery/discovery.service.ts:79,85` — `Prisma.IntegrationType` tidak diekspor di Prisma 6.19. Ganti jadi `import { IntegrationType } from '@prisma/client'` lalu `type as IntegrationType` (atau `Prisma.$Enums.IntegrationType`).
-2. [ ] **Buat migration Prisma** untuk enum `IntegrationType` (nilai baru `TASMOTA`, `SHELLY` sudah di schema, belum ada migration).
-3. [ ] **Commit kerjaan in-flight** per-fitur (commit kecil & terpisah):
+2. [x] **Buat migration Prisma** untuk enum `IntegrationType` (nilai baru `TASMOTA`, `SHELLY` sudah di schema, belum ada migration).
+3. [x] **Commit kerjaan in-flight** per-fitur (commit kecil & terpisah):
    - `feat: discovery universal mDNS/DNS-SD` (`apps/api/src/discovery/`)
    - `feat: integrasi Tasmota` (`packages/integration-tasmota/`)
    - `feat: STT lokal whisper.cpp` (`stt.service.ts`, `nexa-transcribe.dto.ts`)
    - `feat: UI onboarding perangkat` (`add-device-modal.tsx`, `device-card.tsx`)
 4. [ ] **Push ke GitHub** (ingat: user yang push sendiri).
-5. [ ] Tetapkan gate: merge hanya jika `typecheck` + `build` hijau.
+5. [x] Gate CI: `ci.yml` menjalankan lint + typecheck + test + build tiap PR.
 
 ---
 
-## Fase B — Testing (saat ini 0 test)
+## Fase B — Testing — ✅ selesai
 
-1. [ ] **API** — pasang Jest + supertest (NestJS default):
+1. [x] **API** — pasang Vitest (370 test):
    - Unit: `auth`, `devices`, `rooms`, `scenes`, `automations`, `notifications`, `energy`.
    - Unit: `nexa-tools` (setiap tool + safety layer), `nexa.service` (loop tool-calling).
    - Unit: adapters (`mqtt`, `tasmota`) memakai stub/mode mock.
    - Unit: `discovery` (mDNS hasil mock, routing vendor → integration).
-2. [ ] **Web** — pasang Vitest + React Testing Library:
+2. [x] **Web** — pasang Vitest + React Testing Library (83 test):
    - `nexa-robot` (8 state → ekspresi benar), `device-card`, `add-device-modal`.
-3. [ ] **E2E smoke** — register → login → buat device → kirim command → cek state.
-4. [ ] Tambah script `test` di root + tiap app (`turbo run test`).
+3. [~] **Smoke manual** — register → login → buat device → kirim command → cek state
+   sudah diverifikasi lewat stack Docker yang berjalan; belum jadi automated E2E.
+4. [x] Script `test` di root + tiap app (`turbo run test`).
 
 ---
 
@@ -105,13 +115,24 @@ NexaHome dianggap siap distribusi bila:
 
 ---
 
-## Fase H — Security Hardening (sisa Phase 8)
+## Fase H — Security Hardening
 
-1. [ ] Rate limiting endpoint auth (brute-force).
-2. [ ] Refresh token / logout (sekarang JWT `7d` tanpa revoke).
-3. [ ] Validasi secret produksi (`JWT_SECRET` jangan `change-me-in-production`).
-4. [ ] `CORS_ORIGIN` produksi (bukan `localhost`).
-5. [ ] Audit validasi input (class-validator sudah ada — cek konsistensi).
+1. [~] Rate limiting — `RateLimitGuard` sudah terpasang di seluruh endpoint
+   `/auth/*` (register, login, refresh); rate limit **global** belum.
+2. [~] Refresh token / logout — refresh token dirotasi dan bisa dicabut saat
+   logout; **deteksi reuse** (token lama dicabut masih dipakai) belum.
+3. [x] Validasi secret produksi — `validateEnv` menolak `JWT_SECRET` default/kosong,
+   dan fallback secret dihapus dari `AuthModule` & `JwtStrategy`.
+4. [~] `CORS_ORIGIN` produksi — `main.ts` memakai whitelist dari env (validasi
+   env mewajibkan `CORS_ORIGIN`), dan WebSocket tidak lagi meloloskan origin
+   localhost tanpa whitelist. Deployment produksi belum diverifikasi.
+5. [x] Audit validasi input — kontrak error kanonik §13
+   (`apps/api/src/common/errors/`), validasi capability + rentang nilai di
+   Command Engine, dan web client sudah membaca `error.code`/`error.message`.
+6. [x] Kredensial integration dienkripsi at-rest (AES-256-GCM) dan selalu
+   disamarkan di respons. `INTEGRATION_CREDENTIALS_KEY` wajib ada.
+7. [x] WebSocket wajib JWT saat handshake; event dikirim per room `home:<id>`.
+8. [x] Otorisasi berbasis `HomeMember` (owner + anggota) di semua resource.
 
 ---
 
@@ -136,6 +157,27 @@ NexaHome dianggap siap distribusi bila:
 4. **Fase E** (Docker) — orang bisa install.
 5. **Fase C** (voice live) — flagship siap.
 6. **Fase D, H, I** — penyempurnaan.
+
+---
+
+## Integrasi yang sengaja tidak ada
+
+Bagian ini supaya tidak ada yang menebak-nebak kapan vendor tertentu "support".
+
+| Integrasi | Status | Syarat supaya benar-benar dibuat |
+| --- | --- | --- |
+| **WiZ** | **Dihapus** (commit `23d200d`) | Dokumentasi resmi WiZ yang bisa dibaca + perangkat WiZ nyata untuk verifikasi protokol. Ditunda karena versi lama menulis endpoint UDP yang tidak bisa dipertanggungjawabkan tanpa sumber resmi. |
+| Google Home | Tidak ada | Project Google Cloud, OAuth account linking, SYNC intent yang lolos review. Detail di [google-home.md](google-home.md). |
+| Tuya | Tidak ada | Dokumentasi resmi Tuya IoT Platform + akun developer + device nyata. |
+| SmartThings | Tidak ada | OAuth SmartThings + device nyata. |
+| Infrared | Tidak ada | IR butuh perangkat pengirim infrared (blaster), bukan broker MQTT. |
+| SSDP/UPnP | Belum | Perangkat yang benar-benar memancarkan SSDP di jaringan. |
+| BLE | Ditunda (keputusan pengguna) | Perangkat BLE dipasangkan manual. |
+| ESP32 / Home Assistant / Shelly | Enum ada, **adapter belum** | Tulis adapter-nya; lihat checklist di [integrations.md](integrations.md#6-menambah-integrasi-baru). |
+
+Aturan yang dipakai: kalau tidak ada dokumentasi resmi **dan** perangkat nyata
+untuk menguji, integrasi tidak ditulis — lebih baik tidak ada daripada ada tapi
+merusak rumah orang.
 
 ---
 

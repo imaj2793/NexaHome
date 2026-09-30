@@ -4,6 +4,37 @@ Base URL: `http://localhost:3001/api` · Semua endpoint (kecuali `register`/`log
 
 > `?homeId=...` = filter opsional berdasarkan home milik user.
 
+## Kontrak error
+
+Semua error memakai satu bentuk, apa pun penyebabnya:
+
+```json
+{
+  "success": false,
+  "error": { "code": "DEVICE_OFFLINE", "message": "…", "details": { } }
+}
+```
+
+`details` hanya muncul kalau ada isinya. `code` yang bisa muncul:
+
+| Code | HTTP | Kapan |
+| --- | --- | --- |
+| `VALIDATION_FAILED` | 400 | DTO tidak valid; `details.fields` berisi daftar field |
+| `UNAUTHORIZED` | 401 | token hilang/tidak valid/kedaluwarsa |
+| `FORBIDDEN` | 403 | bukan pemilik, bukan anggota, atau WS join rumah orang |
+| `NOT_FOUND` | 404 | resource tidak ada **atau** bukan milik user |
+| `RATE_LIMITED` | 429 | melewati batas; `details.retryAfter` berisi detik |
+| `DEVICE_OFFLINE` | 503 | `state.online === false` saat perintah dikirim |
+| `CAPABILITY_NOT_SUPPORTED` | 400 | perangkat tidak punya capability itu |
+| `INVALID_COMMAND_VALUE` | 400 | nilai di luar rentang capability |
+| `INTEGRATION_NOT_AVAILABLE` | 501 | integration tidak punya adapter yang jalan |
+| `INTEGRATION_COMMAND_FAILED` | 502 | vendor/adapter menolak atau gagal |
+| `INTEGRATION_CREDENTIALS_INVALID` | 400 | `INTEGRATION_CREDENTIALS_KEY` tidak bisa dipakai |
+| `INTERNAL_ERROR` | 500 | kesalahan tak terduga (detailnya tidak dibocorkan) |
+
+Kode error eksternal (Prisma/Postgres/vendor) tidak pernah muncul di `code`;
+semuanya diterjemahkan ke kode di atas.
+
 ---
 
 ## Auth
@@ -22,7 +53,10 @@ Base URL: `http://localhost:3001/api` · Semua endpoint (kecuali `register`/`log
 | POST | `/homes` | buat home |
 | GET | `/homes/:id` | detail + rooms/devices/integrations |
 | PATCH | `/homes/:id` | ubah |
-| DELETE | `/homes/:id` | hapus |
+| DELETE | `/homes/:id` | hapus (owner) |
+| GET | `/homes/:id/members` | daftar anggota rumah |
+| POST | `/homes/:id/members` | tambah anggota (owner) — body `{ "email": "…", "role"?: "USER\|ADMIN" }` |
+| DELETE | `/homes/:id/members/:memberId` | keluarkan anggota (owner) |
 
 ## Rooms
 
@@ -49,9 +83,14 @@ Base URL: `http://localhost:3001/api` · Semua endpoint (kecuali `register`/`log
 
 | Method | Path | Keterangan |
 | --- | --- | --- |
-| GET | `/integrations?homeId=` | daftar |
-| POST | `/integrations` | buat |
-| POST | `/integrations/:id/discover` | scan perangkat (mock untuk dev) |
+| GET | `/integrations?homeId=` | daftar; `config` selalu disamarkan (`••••••`) |
+| POST | `/integrations` | buat (owner); config dienkripsi AES-256-GCM |
+| PATCH | `/integrations/:id` | ubah nama/status/config (owner); dipakai juga untuk mengenkripsi ulang config lama |
+| POST | `/integrations/:id/discover` | scan perangkat. **Mock mengembalikan `[]`** — tidak ada perangkat palsu |
+| POST | `/integrations/:id/connect` | simpan hasil scan ke registry |
+
+`credentialsEncrypted: false` artinya config masih plaintext dari masa lalu;
+server tetap membacanya, tapi setiap nilai dikembalikan tersamarkan.
 
 ## Scenes (Phase 5)
 
@@ -123,8 +162,26 @@ yang belum siap:
 
 ## WebSocket
 
-Event `nexa.state` → `{ homeId, state, message? }` (state robot 8 ekspresi).
-Event `device:state` → update state perangkat real-time.
+`socket.io` di `http://localhost:3001`. Wajib kirim access token saat handshake,
+lalu join room rumah. Setelah itu event hanya untuk rumah yang di-join.
+
+```js
+const s = io('http://localhost:3001', { auth: { token: accessToken } });
+s.on('auth:ok', () => s.emit('home:join', { homeId }));
+```
+
+| Event | Arah | Isi |
+| --- | --- | --- |
+| `auth:ok` | server → client | `{ userId }` setelah token terverifikasi |
+| `home:join` | client → server | `{ homeId }` |
+| `home:joined` | server → client | `{ homeId }` setelah masuk room |
+| `error:code` | server → client | `{ code: 'UNAUTHORIZED'\|'FORBIDDEN', message }` |
+| `device:state` | server → client | state perangkat di rumah itu |
+| `nexa.state` | server → client | `{ homeId, state, message? }` (8 ekspresi robot) |
+
+Tanpa token atau token rusak: `error:code` dengan `UNAUTHORIZED`, lalu
+koneksi ditutup. Join rumah yang bukan miliknya: `error:code` dengan
+`FORBIDDEN`. Tidak ada broadcast ke semua client.
 
 **State Nexa:** `IDLE · LISTENING · THINKING · PROCESSING · SUCCESS · ERROR · READY · SLEEPING`
 

@@ -505,8 +505,19 @@ NexaHome/
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Peraturan interaksi komunitas |
 | [`CHANGELOG.md`](CHANGELOG.md) | Riwayat perubahan versi |
 | [`docs/API.md`](docs/API.md) | Referensi endpoint API |
-| [`BLUEPRINT.md`](BLUEPRINT.md) | Arsitektur dan desain teknis |
+| [`docs/architecture.md`](docs/architecture.md) | Arsitektur aktual, alur perintah, dan fitur yang belum ada |
+| [`docs/device-model.md`](docs/device-model.md) | Model perangkat, capability, dan batasannya |
+| [`docs/integrations.md`](docs/integrations.md) | Adapter MQTT/Tasmota, kredensial, dan status tiap integrasi |
+| [`docs/authentication.md`](docs/authentication.md) | Auth JWT, otorisasi owner/anggota, dan WebSocket |
+| [`docs/automation.md`](docs/automation.md) | Automation: yang jalan dan yang belum |
+| [`docs/voice.md`](docs/voice.md) | Jalur AI, provider, dan status voice |
+| [`docs/google-home.md`](docs/google-home.md) | Kenapa Google Home belum ada dan prasyaratnya |
+| [`BLUEPRINT.md`](BLUEPRINT.md) | Desain referensi awal (bukan daftar fitur aktif) |
 | [`IDEA.md`](IDEA.md) | Konsep awal NexaHome |
+
+> Dokumen di `docs/` menjelaskan kondisi **kode saat ini**, termasuk bagian
+> yang belum selesai. `BLUEPRINT.md` dan `IDEA.md` adalah dokumen desain —
+> kalau berbeda dengan kode, `docs/` menang.
 
 ---
 

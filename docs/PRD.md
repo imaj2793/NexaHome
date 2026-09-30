@@ -114,15 +114,15 @@ User buka "Tambah Perangkat"
 | Phase | Isi | Status |
 | --- | --- | --- |
 | 1 — Foundation | monorepo, auth, homes/rooms/devices, dashboard | ✅ |
-| 2 — Smart Home | device core, WiZ, WebSocket | ✅ |
-| 3 — Nexa AI | provider abstraction, tool calling, TTS | ✅ |
+| 2 — Smart Home | device core, WebSocket auth + room per home | ✅ |
+| 3 — Nexa AI | provider abstraction (mock + OpenAI-compatible), tool calling | ✅ kontrak TTS ada, belum dipakai web |
 | 4 — Visual Nexa | robot UI 8 ekspresi + animasi | ✅ |
-| 5 — Automation | scenes, scheduler, triggers, actions | ✅ |
+| 5 — Automation | scenes, scheduler (`SCHEDULE` saja), actions | ⚠️ sebagian |
 | 6 — IoT | MQTT integration | ✅ |
-| 7 — Advanced | notifications, energy monitoring | ✅ |
+| 7 — Advanced | energy monitoring (estimasi), notifications (tanpa pemanggil) | ⚠️ sebagian |
 | 8 — v1.0 | dokumentasi, security hardening | ✅ |
-| **9 — Voice penuh** | DeepSeek live + STT lokal + wake word | 🚧 (kode siap, fallback & mode terbatas selesai; tunggu API key + whisper di box target) |
-| **10 — Onboarding universal** | mDNS + SSDP + Bluetooth | 🚧 mDNS selesai & teruji; SSDP & BLE (ditunda → pairing manual) belum |
+| **9 — Voice penuh** | provider AI live + STT | 🚧 jalur provider ada (mock + OpenAI-compatible). **Belum ada**: rekaman mikrofon di web, wake word, TTS streaming. Lihat [voice.md](voice.md) |
+| **10 — Onboarding universal** | mDNS + SSDP + Bluetooth | 🚧 mDNS selesai; SSDP & BLE (ditunda → pairing manual) belum. TTL state MQTT ditambahkan agar broker tidak menampilkan perangkat basi |
 
 ---
 
@@ -136,4 +136,19 @@ User buka "Tambah Perangkat"
 
 ## 9. Definisi Sukses MVP
 
-Saat ini sudah tercapai: auth, dashboard, device control, WiZ/MQTT, Nexa AI (mock→DeepSeek), scenes, automations, energy, notifications, voice pipeline (STT lokal + wake word).
+**Yang benar-benar ada hari ini:**
+
+- Auth JWT (access + refresh), homes/rooms/devices, anggota rumah (`HomeMember`).
+- Dashboard + control perangkat lewat MQTT/Tasmota, WebSocket per rumah.
+- Kontrak error kanonik (§13) dan enkripsi kredensial integration.
+- Command Engine dengan validasi capability + rentang nilai.
+- Nexa AI dengan provider `mock` (default) dan OpenAI-compatible.
+- Scenes, automation penjadwalan (`SCHEDULE`), energy estimasi, activity log.
+
+**Yang belum ada**, meski sempat diklaim selesai di versi dokumen ini: WiZ,
+notifikasi aktif (metodenya ada, tidak ada pemanggil), wake word, rekaman
+mic, TTS streaming, SSDP, BLE, Google Home, Tuya, SmartThings, infrared,
+dan trigger automation berbasis device state.
+
+Rincian per fitur ada di [architecture.md](architecture.md), [integrations.md](integrations.md),
+[automation.md](automation.md), dan [voice.md](voice.md).

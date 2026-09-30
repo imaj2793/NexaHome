@@ -6,7 +6,16 @@
 
 NexaHome dirancang dengan pendekatan **local-first, modular, extensible**, sehingga perangkat dan layanan dapat ditambahkan tanpa mengubah keseluruhan sistem.
 
-> **Status (Sep 2026):** Phase 1–8 ✅ selesai. Dokumen aktif: [`docs/PRD.md`](docs/PRD.md) (produk), [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) (setup & kontribusi), [`docs/API.md`](docs/API.md) (endpoint). Blueprint ini adalah desain referensi awal; sebagian telah berevolusi (mis. state robot → 8 ekspresi) — utamakan dokumen `docs/` untuk kondisi terkini.
+> **Status (Sep 2026):** Dokumen ini adalah **desain referensi awal**, bukan
+> daftar fitur yang ada. Sebagian sudah berevolusi, sebagian belum pernah
+> diimplementasikan. Untuk kondisi terkini, baca dokumen di `docs/`:
+> [`docs/architecture.md`](docs/architecture.md), [`docs/integrations.md`](docs/integrations.md),
+> [`docs/device-model.md`](docs/device-model.md), [`docs/automation.md`](docs/automation.md),
+> [`docs/voice.md`](docs/voice.md), dan bagian "Yang belum ada" di
+> [`docs/architecture.md`](docs/architecture.md).
+>
+> Yang tidak ada di kode hari ini: **WiZ** (dihapus pada commit `23d200d`),
+> SSDP, BLE, Google Home, Tuya, SmartThings, dan infrared — tidak ada di repo.
 
 ---
 
