@@ -14,7 +14,6 @@ const IOT_SERVICES = [
 
 /** Pemetaan vendor → tipe integration (untuk routing universal). */
 const VENDOR_TO_TYPE: Record<string, string> = {
-  wiz: 'WIZ',
   tasmota: 'TASMOTA',
   shelly: 'SHELLY',
   esphome: 'ESP32',

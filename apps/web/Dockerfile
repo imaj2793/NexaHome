@@ -41,7 +41,6 @@ COPY packages/device-core/package.json ./packages/device-core/package.json
 COPY packages/integration-mqtt/package.json ./packages/integration-mqtt/package.json
 COPY packages/integration-tasmota/package.json ./packages/integration-tasmota/package.json
 COPY packages/types/package.json ./packages/types/package.json
-COPY integrations/wiz/package.json ./integrations/wiz/package.json
 
 # ── deps ─────────────────────────────────────────────────────────────────────
 # Root ikut dipasang karena `next build` melakukan type-check dan membutuhkan

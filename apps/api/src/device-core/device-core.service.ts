@@ -11,7 +11,6 @@ import {
   IntegrationManager,
   toIntegrationCommand,
 } from '@nexahome/device-core';
-import { WizAdapter } from '@nexahome/integration-wiz';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
 import { PrismaService } from '../prisma/prisma.service';
@@ -46,20 +45,17 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly manager: IntegrationManager,
-    private readonly wiz: WizAdapter,
     private readonly mqtt: MqttAdapter,
     private readonly tasmota: TasmotaAdapter,
     private readonly gateway: DeviceGateway,
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.manager.register(this.wiz);
     this.manager.register(this.mqtt);
     this.manager.register(this.tasmota);
     // Integrasi yang gagal connect (mis. broker MQTT mati) tidak boleh
     // menggagalkan boot API: perangkat dari integrasi lain harus tetap
     // bisa dipakai, dan client mqtt.js otomatis mencoba reconnect.
-    await this.connectSafely('WiZ', this.wiz);
     await this.connectSafely('MQTT', this.mqtt);
     await this.connectSafely('Tasmota', this.tasmota);
   }
@@ -80,7 +76,6 @@ export class DeviceCoreService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.wiz.disconnect();
     await this.mqtt.disconnect();
     await this.tasmota.disconnect();
   }

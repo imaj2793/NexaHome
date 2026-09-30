@@ -90,11 +90,9 @@ services:
       # `MQTT_MODE: mock` lewat docker-compose.override.yml.
       MQTT_URL: ${DOCKER_MQTT_URL:-mqtt://mqtt:1883}
       MQTT_MODE: mqtt
-      # Tasmota/WiZ butuh broadcast/mDNS ke jaringan LAN, yang sulit dijangkau
-      # dari container bridge, jadi default-nya mock.
+      # Tasmota butuh mDNS ke jaringan LAN, yang sulit dijangkau dari
+      # container bridge, jadi default-nya mock (scan kosong).
       TASMOTA_MODE: ${TASMOTA_MODE:-mock}
-      WIZ_MODE: ${WIZ_MODE:-mock}
-      WIZ_DISCOVERY_ENABLED: ${WIZ_DISCOVERY_ENABLED:-true}
       # whisper.cpp/ffmpeg tidak dibundel di image API; STT aktif bila biner
       # dan model tersedia di container (lihat docs/DEPLOYMENT.md).
       WHISPER_BIN: ${WHISPER_BIN:-}

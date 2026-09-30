@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IntegrationManager } from '@nexahome/device-core';
-import { WizAdapter } from '@nexahome/integration-wiz';
-import type { WizAdapterConfig } from '@nexahome/integration-wiz';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
 import type { MqttAdapterConfig } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
@@ -12,7 +10,6 @@ import { DeviceGateway } from './device.gateway';
 
 type MqttMode = NonNullable<MqttAdapterConfig['mode']>;
 type TasmotaMode = NonNullable<TasmotaAdapterConfig['mode']>;
-type WizMode = NonNullable<WizAdapterConfig['mode']>;
 
 @Module({
   providers: [
@@ -20,23 +17,17 @@ type WizMode = NonNullable<WizAdapterConfig['mode']>;
     DeviceCoreService,
     IntegrationManager,
     {
-      provide: WizAdapter,
-      inject: [ConfigService],
-      // Nilai mode diteruskan apa adanya; adapter yang memvalidasinya
-      // (parseMode) agar salah ketik env menggagalkan startup dengan jelas.
-      useFactory: (config: ConfigService) =>
-        new WizAdapter({
-          mode: config.get<string>('WIZ_MODE') as WizMode,
-        }),
-    },
-    {
       provide: MqttAdapter,
       inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
-        new MqttAdapter({
+      useFactory: (config: ConfigService) => {
+        const ttl = config.get<string>('MQTT_DISCOVERY_TTL_MS');
+        return new MqttAdapter({
           mode: config.get<string>('MQTT_MODE') as MqttMode,
           url: config.get<string>('MQTT_URL'),
-        }),
+          // `||` bukan `??`: env yang dikosongkan di .env tetap string "".
+          discoveryTtlMs: ttl ? Number(ttl) : undefined,
+        });
+      },
     },
     {
       provide: TasmotaAdapter,

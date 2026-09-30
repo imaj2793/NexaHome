@@ -9,10 +9,15 @@ import {
 
 /** Konfigurasi adapter MQTT. */
 export interface MqttAdapterConfig {
-  /** 'mock' = simulasi in-memory (tanpa network, default); 'mqtt' = broker asli. */
+  /**
+   * 'mock' = tanpa koneksi ke broker (scan selalu kosong);
+   * 'mqtt' = broker asli.
+   */
   mode?: 'mock' | 'mqtt';
   /** URL broker MQTT (mis. `mqtt://localhost:1883`). Wajib saat mode 'mqtt'. */
   url?: string;
+  /** Masa berlaku penemuan (ms). Default 120 detik. */
+  discoveryTtlMs?: number;
 }
 
 /** Mode yang didukung adapter MQTT. */
@@ -24,6 +29,12 @@ const MQTT_MODES: readonly MqttMode[] = ['mock', 'mqtt'];
 interface ResolvedConfig {
   mode: MqttMode;
   url?: string;
+  /**
+   * Berapa lama perangkat tetap dilaporkan hasil scan sejak pesan terakhirnya.
+   * Default 120 detik. Tanpa ini, perangkat yang dihapus/dimatikan tetap
+   * muncul di hasil scan sampai API di-restart.
+   */
+  discoveryTtlMs: number;
 }
 
 /** Benih perangkat mock (mode mock, tanpa network). */
@@ -84,6 +95,8 @@ export class MqttAdapter implements IntegrationAdapter {
   private readonly stateByDevice = new Map<string, Record<string, unknown>>();
   /** Perangkat yang sudah diketahui (via discovery/state). */
   private readonly discovered = new Map<string, DiscoveredDevice>();
+  /** Waktu pesan terakhir yang diterima per perangkat (epoch ms). */
+  private readonly lastSeen = new Map<string, number>();
   /** Penunggu state per perangkat (untuk getDeviceState). */
   private readonly pendingStateWaits = new Map<
     string,
@@ -94,7 +107,12 @@ export class MqttAdapter implements IntegrationAdapter {
     // Nilai mode berasal dari env, jadi divalidasi agar salah ketik
     // (mis. "live") tidak membuat adapter diam-diam jadi no-op.
     const mode = parseMode<MqttMode>(config.mode, MQTT_MODES, 'mock', 'MQTT_MODE');
-    this.config = { mode, url: config.url };
+    this.config = {
+      mode,
+      url: config.url,
+      // `||` bukan `??`: env yang dikosongkan di .env tetap string "".
+      discoveryTtlMs: Number(config.discoveryTtlMs) || 120_000,
+    };
     if (this.config.mode === 'mqtt' && !this.config.url) {
       throw new Error(
         'Mode "mqtt" memerlukan `url` broker (mis. mqtt://localhost:1883).',
@@ -120,21 +138,33 @@ export class MqttAdapter implements IntegrationAdapter {
   }
 
   async discoverDevices(): Promise<DiscoveredDevice[]> {
+    // Mode mock sengaja TIDAK memalsukan hasil scan. Dulu ia mengembalikan
+    // sensor fiktif dari mockState sehingga UI menampilkan perangkat yang
+    // tidak ada. Kontrak baru: mock = tidak ada yang ditemukan; hanya mode
+    // mqtt yang melaporkan perangkat yang benar-benar diumumkan ke broker.
     if (this.config.mode === 'mock') {
-      return [...this.mockState.entries()].map(([id, state]) => ({
-        id,
-        name: this.mockName(id),
-        type: 'sensor',
-        capabilities: this.mockCapabilities(id),
-        state: { ...state },
-      }));
+      return [];
     }
 
-    // mode mqtt: kembalikan perangkat yang sudah diumumkan/terdeteksi.
+    // mode mqtt: perangkat yang diumumkan lewat topic nexahome/discovery atau
+    // yang mengirim state. Entri yang basi dibuang — tanpa ini, perangkat yang
+    // sudah dihapus/offline tetap muncul di hasil scan sampai API di-restart.
+    this.pruneStale();
     return [...this.discovered.values()].map((d) => ({
       ...d,
       state: { ...d.state },
     }));
+  }
+
+  /** Buang perangkat yang tidak lagi mengirim pesan dalam TTL. */
+  private pruneStale(): void {
+    const cutoff = Date.now() - this.config.discoveryTtlMs;
+    for (const [id, seen] of [...this.lastSeen]) {
+      if (seen >= cutoff) continue;
+      this.lastSeen.delete(id);
+      this.discovered.delete(id);
+      this.stateByDevice.delete(id);
+    }
   }
 
   async getDeviceState(deviceId: string): Promise<Record<string, unknown>> {
@@ -179,17 +209,6 @@ export class MqttAdapter implements IntegrationAdapter {
     for (const d of DEFAULT_MOCK_DEVICES) {
       this.mockState.set(d.id, { ...d.state });
     }
-  }
-
-  private mockName(id: string): string {
-    return (
-      DEFAULT_MOCK_DEVICES.find((d) => d.id === id)?.name ??
-      `Perangkat MQTT ${id}`
-    );
-  }
-
-  private mockCapabilities(id: string): string[] {
-    return DEFAULT_MOCK_DEVICES.find((d) => d.id === id)?.capabilities ?? [];
   }
 
   private executeMock(
@@ -243,6 +262,7 @@ export class MqttAdapter implements IntegrationAdapter {
     const deviceId = this.deviceIdFromStateTopic(topic);
     if (!deviceId) return;
 
+    this.lastSeen.set(deviceId, Date.now());
     this.stateByDevice.set(deviceId, data);
 
     const waiter = this.pendingStateWaits.get(deviceId);
@@ -281,6 +301,7 @@ export class MqttAdapter implements IntegrationAdapter {
 
     this.discovered.set(id, { id, name, type, capabilities, state });
     this.stateByDevice.set(id, state);
+    this.lastSeen.set(id, Date.now());
   }
 
   private deviceIdFromStateTopic(topic: string): string | undefined {

@@ -109,11 +109,11 @@ describe('DiscoveryService', () => {
         throw new Error('mDNS tidak didukung di lingkungan ini');
       });
       manager.discoverAll.mockResolvedValue([
-        { id: 'wiz_1', name: 'Lampu WiZ', type: 'light', capabilities: ['power'], state: {}, vendor: 'wiz' },
+        { id: 'tasmota_1', name: 'Relay Dapur', type: 'switch', capabilities: ['power'], state: {}, vendor: 'tasmota' },
       ]);
 
       await expect(service.scanNetwork(10)).resolves.toMatchObject([
-        { id: 'wiz_1', vendor: 'wiz' },
+        { id: 'tasmota_1', vendor: 'tasmota' },
       ]);
     });
   });
@@ -135,10 +135,10 @@ describe('DiscoveryService', () => {
       await service.connect('user_1', {
         homeId: 'home_1',
         roomId: 'room_1',
-        integrationId: 'int_wiz',
+        integrationId: 'int_tasmota',
         device: {
-          id: 'wiz_aabbcc',
-          name: 'Lampu Teras',
+          id: '10.0.0.55',
+          name: 'Relay Teras',
           type: 'light',
           capabilities: ['power', 'brightness'],
           state: { power: true },
@@ -148,10 +148,10 @@ describe('DiscoveryService', () => {
       expect(prisma.integration.create).not.toHaveBeenCalled();
       expect(prisma.device.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          name: 'Lampu Teras',
-          externalId: 'wiz_aabbcc',
+          name: 'Relay Teras',
+          externalId: '10.0.0.55',
           roomId: 'room_1',
-          integrationId: 'int_wiz',
+          integrationId: 'int_tasmota',
           capabilities: ['power', 'brightness'],
           state: { power: true },
         }),

@@ -19,7 +19,6 @@ enum Role {
 }
 
 enum IntegrationType {
-  WIZ
   MQTT
   ESP32
   HOME_ASSISTANT

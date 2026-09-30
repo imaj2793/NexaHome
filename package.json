@@ -2,7 +2,7 @@
   "name": "nexahome",
   "version": "0.1.0",
   "private": true,
-  "description": "NexaHome — open-source smart home platform with Nexa AI assistant",
+  "description": "NexaHome \u2014 open-source smart home platform with Nexa AI assistant",
   "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=20.0.0"
@@ -23,7 +23,9 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "docker:seed": "docker compose run --rm migrate pnpm exec prisma db seed",
-    "docker:images": "docker images nexahome/*"
+    "docker:images": "docker images nexahome/*",
+    "db:seed:demo": "pnpm --filter @nexahome/api prisma:seed:demo",
+    "db:seed:demo:reset": "pnpm --filter @nexahome/api prisma:seed:demo:reset"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

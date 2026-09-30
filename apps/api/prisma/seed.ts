@@ -3,6 +3,18 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+/**
+ * Seed dasar: akun owner, satu home, dan beberapa ruangan.
+ *
+ * Sengaja TIDAK membuat perangkat, scene, atau otomasi. Data perangkat
+ * dummy pernah membuat hasil scan menampilkan lampu fiktif ("WiZ Bulb
+ * Ruang Tamu") yang tidak ada di dunia nyata — itu menyesatkan. Sekarang
+ * integrasi hanya melaporkan perangkat yang benar-benar ditemukan di
+ * jaringan (MQTT, mDNS), dan perangkat bisa ditambahkan lewat scan atau
+ * input manual.
+ *
+ * Untuk data demo yang disengaja, jalankan: `pnpm db:seed:demo`.
+ */
 async function main() {
   const passwordHash = await bcrypt.hash('password123', 10);
 
@@ -33,113 +45,30 @@ async function main() {
     });
   }
 
-  const livingRoom = await prisma.room.findFirst({
-    where: { homeId: home.id, name: 'Ruang Tamu' },
-  });
-
-  const wizIntegration = await prisma.integration.upsert({
-    where: { id: 'integration_wiz' },
+  // Integrasi default. Mode diambil dari env (MQTT_MODE / TASMOTA_MODE),
+  // jadi config disimpan kosong — status sebenarnya dilihat dari log API.
+  await prisma.integration.upsert({
+    where: { id: 'integration_mqtt' },
     update: {},
     create: {
-      id: 'integration_wiz',
-      name: 'WiZ',
-      type: 'WIZ',
+      id: 'integration_mqtt',
+      name: 'MQTT',
+      type: 'MQTT',
       homeId: home.id,
-      config: { mode: 'mock' },
     },
   });
 
-  const sampleDevices = [
-    {
-      id: 'device_living_light',
-      name: 'Lampu Ruang Tamu',
-      type: 'light',
-      roomId: livingRoom?.id ?? null,
-      integrationId: wizIntegration.id,
-      externalId: 'wiz_aabbccddeeff',
-      capabilities: ['power', 'brightness', 'color', 'temperature'],
-      state: { power: true, brightness: 80 },
-    },
-    {
-      id: 'device_bedroom_light',
-      name: 'Lampu Kamar',
-      type: 'light',
-      roomId: null,
-      integrationId: wizIntegration.id,
-      externalId: 'wiz_112233445566',
-      capabilities: ['power', 'brightness'],
-      state: { power: false, brightness: 40 },
-    },
-  ];
-
-  for (const d of sampleDevices) {
-    await prisma.device.upsert({
-      where: { id: d.id },
-      update: { integrationId: d.integrationId, externalId: d.externalId },
-      create: { ...d, homeId: home.id },
-    });
-  }
-
-  // ── Scene: Movie Night ──
-  const scene = await prisma.scene.upsert({
-    where: { id: 'scene_movie_night' },
-    update: {},
-    create: { id: 'scene_movie_night', name: 'Movie Night', homeId: home.id },
-  });
-  await prisma.sceneAction.upsert({
-    where: { id: 'scene_action_dim' },
-    update: { sceneId: scene.id },
-    create: {
-      id: 'scene_action_dim',
-      sceneId: scene.id,
-      deviceId: 'device_living_light',
-      action: { action: 'set_brightness', value: 20 },
-    },
-  });
-  await prisma.sceneAction.upsert({
-    where: { id: 'scene_action_bedroom_off' },
-    update: { sceneId: scene.id },
-    create: {
-      id: 'scene_action_bedroom_off',
-      sceneId: scene.id,
-      deviceId: 'device_bedroom_light',
-      action: { action: 'turn_off' },
-    },
-  });
-
-  // ── Automation: jadwal pagi ──
-  const automation = await prisma.automation.upsert({
-    where: { id: 'automation_morning' },
+  await prisma.integration.upsert({
+    where: { id: 'integration_tasmota' },
     update: {},
     create: {
-      id: 'automation_morning',
-      name: 'Lampu Pagi 07:00',
+      id: 'integration_tasmota',
+      name: 'Tasmota',
+      type: 'TASMOTA',
       homeId: home.id,
-      enabled: true,
-    },
-  });
-  await prisma.automationTrigger.upsert({
-    where: { id: 'trigger_morning' },
-    update: { automationId: automation.id },
-    create: {
-      id: 'trigger_morning',
-      automationId: automation.id,
-      type: 'SCHEDULE',
-      config: { time: '07:00' },
-    },
-  });
-  await prisma.automationAction.upsert({
-    where: { id: 'action_morning_on' },
-    update: { automationId: automation.id },
-    create: {
-      id: 'action_morning_on',
-      automationId: automation.id,
-      deviceId: 'device_living_light',
-      action: { action: 'turn_on' },
     },
   });
 
-  // ── Notifikasi selamat datang ──
   await prisma.notification.upsert({
     where: { id: 'notif_welcome' },
     update: {},
@@ -147,7 +76,8 @@ async function main() {
       id: 'notif_welcome',
       userId: user.id,
       title: 'Selamat datang di NexaHome',
-      body: 'Scene & otomasi sudah siap. Coba ketik "aktifkan movie night" ke Nexa.',
+      body: 'Tambahkan perangkat lewat menu Devices → Scan, atau daftarkan manual. ' +
+        'Scan hanya menampilkan perangkat yang benar-benar ada di jaringan Anda.',
     },
   });
 

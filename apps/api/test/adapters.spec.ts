@@ -1,5 +1,4 @@
 import { IntegrationCommand, parseMode } from '@nexahome/device-core';
-import { WizAdapter } from '@nexahome/integration-wiz';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
 
@@ -65,127 +64,6 @@ const mqttAdapterWithFakeClient = (): {
   return { adapter, client };
 };
 
-describe('WizAdapter (mode mock)', () => {
-  let adapter: WizAdapter;
-
-  beforeEach(() => {
-    adapter = new WizAdapter({ mode: 'mock' });
-  });
-
-  afterEach(async () => {
-    await adapter.disconnect();
-  });
-
-  it('memiliki type WIZ dan bisa connect/disconnect tanpa error', async () => {
-    expect(adapter.type).toBe('WIZ');
-    await expect(adapter.connect()).resolves.toBeUndefined();
-    await expect(adapter.disconnect()).resolves.toBeUndefined();
-  });
-
-  it('menemukan dua lampu mock dengan kapabilitas lengkap', async () => {
-    const devices = await adapter.discoverDevices();
-    expect(devices).toHaveLength(2);
-    expect(devices.map((d) => d.id)).toEqual([
-      'wiz_aabbccddeeff',
-      'wiz_112233445566',
-    ]);
-    expect(devices[0].name).toBe('WiZ Bulb Ruang Tamu');
-    expect(devices[0].type).toBe('light');
-    expect(devices[0].capabilities).toEqual([
-      'power',
-      'brightness',
-      'color',
-      'temperature',
-    ]);
-    expect(devices[0].state.power).toBe(true);
-  });
-
-  it('mengembalikan state awal lampu dari getDeviceState', async () => {
-    const state = await adapter.getDeviceState('wiz_112233445566');
-    expect(state).toMatchObject({
-      power: false,
-      brightness: 40,
-      temperature: 2700,
-    });
-  });
-
-  it('menyalakan lampu lewat perintah power true', async () => {
-    const state = await adapter.executeCommand(
-      'wiz_112233445566',
-      cmd('power', true),
-    );
-    expect(state.power).toBe(true);
-    expect((await adapter.getDeviceState('wiz_112233445566')).power).toBe(true);
-  });
-
-  it('mematikan lampu lewat perintah power false', async () => {
-    const state = await adapter.executeCommand(
-      'wiz_aabbccddeeff',
-      cmd('power', false),
-    );
-    expect(state.power).toBe(false);
-    expect((await adapter.getDeviceState('wiz_aabbccddeeff')).power).toBe(false);
-  });
-
-  it('mengatur kecerahan dan otomatis menyalakan power', async () => {
-    const state = await adapter.executeCommand(
-      'wiz_112233445566',
-      cmd('brightness', 55),
-    );
-    expect(state.brightness).toBe(55);
-    expect(state.power).toBe(true);
-  });
-
-  it('kecerahan 0 ikut mematikan power', async () => {
-    const state = await adapter.executeCommand(
-      'wiz_aabbccddeeff',
-      cmd('brightness', 0),
-    );
-    expect(state.brightness).toBe(0);
-    expect(state.power).toBe(false);
-  });
-
-  it('mengatur warna RGB danastore di state internal', async () => {
-    const color = { r: 10, g: 20, b: 30 };
-    const state = await adapter.executeCommand('wiz_aabbccddeeff', cmd('color', color));
-    expect(state.color).toEqual(color);
-    expect((await adapter.getDeviceState('wiz_aabbccddeeff')).color).toEqual(color);
-  });
-
-  it('mengatur suhu warna', async () => {
-    const state = await adapter.executeCommand(
-      'wiz_aabbccddeeff',
-      cmd('temperature', 4000),
-    );
-    expect(state.temperature).toBe(4000);
-  });
-
-  it('membuat state baru untuk MAC yang tidak dikenal', async () => {
-    const state = await adapter.executeCommand('wiz_unknown', cmd('power', true));
-    expect(state).toEqual({ power: true, brightness: 0 });
-    expect(await adapter.getDeviceState('wiz_unknown')).toEqual({
-      power: true,
-      brightness: 0,
-    });
-  });
-});
-
-describe('WizAdapter (mode udp)', () => {
-  it('tidak membuka socket sampai connect() dipanggil', async () => {
-    const adapter = new WizAdapter({ mode: 'udp' });
-    expect(adapter.type).toBe('WIZ');
-    expect((adapter as unknown as { socket?: unknown }).socket).toBeUndefined();
-    await adapter.disconnect();
-  });
-
-  it('menolak permintaan state ketika IP perangkat belum diketahui', async () => {
-    const adapter = new WizAdapter({ mode: 'udp' });
-    await expect(adapter.getDeviceState('aabbccddeeff')).rejects.toThrow(
-      /tidak diketahui/,
-    );
-  });
-});
-
 describe('MqttAdapter (mode mock)', () => {
   let adapter: MqttAdapter;
 
@@ -203,16 +81,25 @@ describe('MqttAdapter (mode mock)', () => {
     await expect(adapter.disconnect()).resolves.toBeUndefined();
   });
 
-  it('menemukan sensor mock dengan kapabilitas yang sesuai', async () => {
-    const devices = await adapter.discoverDevices();
-    expect(devices).toHaveLength(2);
-    expect(devices[0]).toMatchObject({
-      id: 'mqtt_sensor_suhu_01',
-      name: 'Sensor Suhu Ruang Tamu',
-      type: 'sensor',
-    });
-    expect(devices[0].capabilities).toEqual(['temperature', 'humidity']);
-    expect(devices[1].capabilities).toEqual(['motion']);
+  it('membuang perangkat basi dari hasil scan (TTL)', async () => {
+    // Tanpa TTL, perangkat yang sudah dihapus/offline tetap muncul di scan
+    // sampai API di-restart.
+    const adapter = new MqttAdapter({ mode: 'mock', discoveryTtlMs: 1 });
+    const internals = adapter as unknown as {
+      lastSeen: Map<string, number>;
+      discovered: Map<string, unknown>;
+    };
+    internals.discovered.set('dev_lama', { id: 'dev_lama', name: 'Lama' });
+    internals.lastSeen.set('dev_lama', Date.now() - 10_000);
+
+    await expect(adapter.discoverDevices()).resolves.toEqual([]);
+  });
+
+  it('tidak mengarang perangkat saat scan dalam mode mock', async () => {
+    // Kontrak: mock berarti "tidak ada broker", bukan "sensor fiktif".
+    // Mengembalikan sensor palsu membuat UI menampilkan perangkat yang
+    // tidak ada di jaringan.
+    await expect(adapter.discoverDevices()).resolves.toEqual([]);
   });
 
   it('mengembalikan state sensor dari getDeviceState', async () => {
@@ -386,17 +273,10 @@ describe('TasmotaAdapter (mode mock)', () => {
     await expect(adapter.disconnect()).resolves.toBeUndefined();
   });
 
-  it('menumerate relay dan dimmer mock', async () => {
-    const devices = await adapter.discoverDevices();
-    expect(devices).toHaveLength(2);
-    expect(devices[0]).toMatchObject({
-      id: 'tasmota_relay_01',
-      name: 'Tasmota Relay',
-      type: 'switch',
-      vendor: 'tasmota',
-    });
-    expect(devices[0].capabilities).toEqual(['power']);
-    expect(devices[1].capabilities).toEqual(['power', 'brightness']);
+  it('tidak mengarang perangkat saat scan dalam mode mock', async () => {
+    // Tasmota nyata ditemukan lewat mDNS (_tasmota._tcp) oleh DiscoveryService
+    // atau didaftarkan manual; adapter tidak boleh mengarang hasilnya.
+    await expect(adapter.discoverDevices()).resolves.toEqual([]);
   });
 
   it('getDeviceState mengembalikan state relay', async () => {
@@ -554,12 +434,6 @@ describe('validasi mode integrasi', () => {
   it('menolak TASMOTA_MODE yang tidak dikenal', () => {
     expect(() => new TasmotaAdapter({ mode: 'live' as 'http' })).toThrow(
       /TASMOTA_MODE="live" tidak dikenal/,
-    );
-  });
-
-  it('menolak WIZ_MODE yang tidak dikenal', () => {
-    expect(() => new WizAdapter({ mode: 'live' as 'udp' })).toThrow(
-      /WIZ_MODE="live" tidak dikenal/,
     );
   });
 

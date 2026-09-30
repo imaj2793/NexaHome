@@ -15,4 +15,3 @@ process.env.DATABASE_URL =
   'postgresql://nexahome:nexahome@localhost:5432/nexahome?schema=public';
 process.env.AI_PROVIDER = process.env.AI_PROVIDER ?? 'mock';
 process.env.MQTT_MODE = process.env.MQTT_MODE ?? 'mock';
-process.env.WIZ_MODE = process.env.WIZ_MODE ?? 'mock';

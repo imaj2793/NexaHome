@@ -3,7 +3,6 @@
  * dengan kolom `Integration.type` di database.
  */
 export type IntegrationType =
-  | 'WIZ'
   | 'MQTT'
   | 'ESP32'
   | 'HOME_ASSISTANT'
@@ -23,7 +22,7 @@ export interface DiscoveredDevice {
   type: string;
   capabilities: string[];
   state: Record<string, unknown>;
-  /** Vendor/protokol (mis. 'wiz', 'tasmota', 'shelly') — untuk routing universal. */
+  /** Vendor/protokol (mis. 'tasmota', 'shelly') — untuk routing universal. */
   vendor?: string;
 }
 

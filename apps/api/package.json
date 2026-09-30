@@ -2,7 +2,7 @@
   "name": "@nexahome/api",
   "version": "0.1.0",
   "private": true,
-  "description": "NexaHome API — NestJS backend (auth, homes, rooms, devices, integrations)",
+  "description": "NexaHome API \u2014 NestJS backend (auth, homes, rooms, devices, integrations)",
   "scripts": {
     "build": "nest build",
     "dev": "nest start --watch",
@@ -16,7 +16,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "prisma:seed:demo": "ts-node prisma/seed-demo.ts",
+    "prisma:seed:demo:reset": "ts-node -e \"import { PrismaClient } from '@prisma/client'; const p = new PrismaClient(); (async () => { const devs = await p.device.findMany({ where: { id: { startsWith: 'demo' } }, select: { id: true } }); const ids = devs.map(d => d.id); await p.sceneAction.deleteMany({ where: { deviceId: { in: ids } } }); await p.automationAction.deleteMany({ where: { deviceId: { in: ids } } }); await p.automationTrigger.deleteMany({ where: { automationId: { startsWith: 'demo' } } }); await p.automation.deleteMany({ where: { id: { startsWith: 'demo' } } }); await p.scene.deleteMany({ where: { id: { startsWith: 'demo' } } }); await p.device.deleteMany({ where: { id: { startsWith: 'demo' } } }); console.log('Data demo dihapus:', ids.length); await p.\\$disconnect(); })();\""
   },
   "dependencies": {
     "@nestjs/common": "^12.1.1",
@@ -31,7 +33,6 @@
     "@nexahome/device-core": "workspace:*",
     "@nexahome/integration-mqtt": "workspace:*",
     "@nexahome/integration-tasmota": "workspace:*",
-    "@nexahome/integration-wiz": "workspace:*",
     "@nexahome/types": "workspace:*",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",

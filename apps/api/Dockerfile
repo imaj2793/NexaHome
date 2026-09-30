@@ -41,7 +41,6 @@ COPY packages/device-core/package.json ./packages/device-core/package.json
 COPY packages/integration-mqtt/package.json ./packages/integration-mqtt/package.json
 COPY packages/integration-tasmota/package.json ./packages/integration-tasmota/package.json
 COPY packages/types/package.json ./packages/types/package.json
-COPY integrations/wiz/package.json ./integrations/wiz/package.json
 
 # ── deps ─────────────────────────────────────────────────────────────────────
 # Root + api + package yang dipakai api. Dependensi web sengaja tidak diikutkan
@@ -101,7 +100,6 @@ COPY --from=builder --chown=node:node /app/packages/device-core/dist ./packages/
 COPY --from=builder --chown=node:node /app/packages/integration-mqtt/dist ./packages/integration-mqtt/dist
 COPY --from=builder --chown=node:node /app/packages/integration-tasmota/dist ./packages/integration-tasmota/dist
 COPY --from=builder --chown=node:node /app/packages/types/dist ./packages/types/dist
-COPY --from=builder --chown=node:node /app/integrations/wiz/dist ./integrations/wiz/dist
 
 USER node
 EXPOSE 3001

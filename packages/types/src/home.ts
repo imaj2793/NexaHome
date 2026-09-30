@@ -29,12 +29,7 @@ export const CreateRoomInputSchema = z.object({
 export type CreateRoomInput = z.infer<typeof CreateRoomInputSchema>;
 
 /** Jenis integrasi perangkat (blueprint §8). */
-export const IntegrationTypeSchema = z.enum([
-  'wiz',
-  'mqtt',
-  'esp32',
-  'home-assistant',
-]);
+export const IntegrationTypeSchema = z.enum(['mqtt', 'tasmota', 'esp32', 'shelly']);
 export type IntegrationType = z.infer<typeof IntegrationTypeSchema>;
 
 export interface Integration {

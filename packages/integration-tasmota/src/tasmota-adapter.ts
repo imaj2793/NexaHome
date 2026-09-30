@@ -89,18 +89,11 @@ export class TasmotaAdapter implements IntegrationAdapter {
   async disconnect(): Promise<void> {}
 
   async discoverDevices(): Promise<DiscoveredDevice[]> {
-    if (this.mode !== 'mock') {
-      // Discovery nyata via mDNS (_tasmota._tcp) ditangani DiscoveryService.
-      return [];
-    }
-    return [...this.mockState.entries()].map(([id, state]) => ({
-      id,
-      name: this.mockName(id),
-      type: 'switch',
-      capabilities: this.mockCaps(id),
-      state: { ...state },
-      vendor: this.vendor,
-    }));
+    // Tanpa memalsukan hasil: mode http tidak melakukan scanning (perangkat
+    // Tasmota ditemukan lewat mDNS oleh DiscoveryService, atau didaftarkan
+    // manual), dan mode mock juga tidak mengarang perangkat. Scan kosong
+    // lebih jujur daripada menampilkan lampu fiktif.
+    return [];
   }
 
   async getDeviceState(deviceId: string): Promise<Record<string, unknown>> {
@@ -128,18 +121,6 @@ export class TasmotaAdapter implements IntegrationAdapter {
     for (const d of DEFAULT_MOCK_DEVICES) {
       this.mockState.set(d.id, { ...d.state });
     }
-  }
-
-  private mockName(id: string): string {
-    return (
-      DEFAULT_MOCK_DEVICES.find((d) => d.id === id)?.name ?? `Tasmota ${id}`
-    );
-  }
-
-  private mockCaps(id: string): string[] {
-    return (
-      DEFAULT_MOCK_DEVICES.find((d) => d.id === id)?.capabilities ?? ['power']
-    );
   }
 
   private executeMock(

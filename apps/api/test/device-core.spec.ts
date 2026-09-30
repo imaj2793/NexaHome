@@ -11,7 +11,6 @@ import {
 } from '@nexahome/device-core';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
-import { WizAdapter } from '@nexahome/integration-wiz';
 import { DeviceCoreService } from '../src/device-core/device-core.service';
 import { DeviceGateway } from '../src/device-core/device.gateway';
 import type { PrismaService } from '../src/prisma/prisma.service';
@@ -36,57 +35,57 @@ describe('IntegrationManager', () => {
 
   it('daftar kosong sebelum ada adapter yang register', () => {
     expect(manager.list()).toEqual([]);
-    expect(manager.has('WIZ')).toBe(false);
-    expect(manager.get('WIZ')).toBeUndefined();
+    expect(manager.has('TASMOTA')).toBe(false);
+    expect(manager.get('SHELLY')).toBeUndefined();
   });
 
   it('register adapter berdasarkan tipenya', () => {
-    const wiz = stubAdapter('WIZ');
+    const shelly = stubAdapter('SHELLY');
     const mqtt = stubAdapter('MQTT');
-    manager.register(wiz);
+    manager.register(shelly);
     manager.register(mqtt);
 
-    expect(manager.list()).toEqual(['WIZ', 'MQTT']);
-    expect(manager.get('WIZ')).toBe(wiz);
+    expect(manager.list()).toEqual(['SHELLY', 'MQTT']);
+    expect(manager.get('SHELLY')).toBe(shelly);
     expect(manager.has('MQTT')).toBe(true);
   });
 
   it('register ulang menimpa adapter dengan tipe sama', () => {
-    const pertama = stubAdapter('WIZ');
-    const kedua = stubAdapter('WIZ');
+    const pertama = stubAdapter('SHELLY');
+    const kedua = stubAdapter('SHELLY');
     manager.register(pertama);
     manager.register(kedua);
 
-    expect(manager.list()).toEqual(['WIZ']);
-    expect(manager.get('WIZ')).toBe(kedua);
+    expect(manager.list()).toEqual(['SHELLY']);
+    expect(manager.get('SHELLY')).toBe(kedua);
   });
 
   it('executeCommand merutekan perintah ke adapter sesuai tipe', async () => {
-    const wiz = stubAdapter('WIZ');
+    const shelly = stubAdapter('SHELLY');
     const tasmota = stubAdapter('TASMOTA');
-    (wiz.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (shelly.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue({
       power: true,
     });
     (tasmota.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue({
       power: false,
     });
-    manager.register(wiz);
+    manager.register(shelly);
     manager.register(tasmota);
 
     const command: IntegrationCommand = { capability: 'power', value: true };
-    expect(await manager.executeCommand('WIZ', 'lampu', command)).toEqual({
+    expect(await manager.executeCommand('SHELLY', 'lampu', command)).toEqual({
       power: true,
     });
-    expect(wiz.executeCommand).toHaveBeenCalledWith('lampu', command);
+    expect(shelly.executeCommand).toHaveBeenCalledWith('lampu', command);
     expect(tasmota.executeCommand).not.toHaveBeenCalled();
 
     await manager.executeCommand('TASMOTA', 'relay', command);
     expect(tasmota.executeCommand).toHaveBeenCalledWith('relay', command);
-    expect(wiz.executeCommand).toHaveBeenCalledTimes(1);
+    expect(shelly.executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('executeCommand melempar error saat tipe tidak terdaftar', async () => {
-    manager.register(stubAdapter('WIZ'));
+    manager.register(stubAdapter('MQTT'));
     await expect(
       manager.executeCommand('SHELLY', 'perangkat', {
         capability: 'power',
@@ -126,12 +125,12 @@ describe('IntegrationManager', () => {
   });
 
   it('discoverAll menggabungkan hasil semua adapter', async () => {
-    const wiz = stubAdapter('WIZ');
-    (wiz.discoverDevices as ReturnType<typeof vi.fn>).mockResolvedValue([
+    const shelly = stubAdapter('SHELLY');
+    (shelly.discoverDevices as ReturnType<typeof vi.fn>).mockResolvedValue([
       {
-        id: 'wiz_1',
-        name: 'WiZ 1',
-        type: 'light',
+        id: 'shelly_1',
+        name: 'Shelly 1',
+        type: 'switch',
         capabilities: ['power'],
         state: { power: true },
       },
@@ -146,15 +145,15 @@ describe('IntegrationManager', () => {
         state: {},
       },
     ]);
-    manager.register(wiz);
+    manager.register(shelly);
     manager.register(mqtt);
 
     const all = await manager.discoverAll();
-    expect(all.map((d) => d.id)).toEqual(['wiz_1', 'mqtt_1']);
+    expect(all.map((d) => d.id)).toEqual(['shelly_1', 'mqtt_1']);
   });
 
   it('discoverAll melewati adapter yang gagal tanpa melempar error', async () => {
-    const rusak = stubAdapter('WIZ');
+    const rusak = stubAdapter('SHELLY');
     (rusak.discoverDevices as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error('socket gagal'),
     );
@@ -176,16 +175,22 @@ describe('IntegrationManager', () => {
     expect(all[0]!.id).toBe('mqtt_1');
   });
 
-  it('bekerja dengan adapter nyata dalam mode mock', async () => {
-    manager.register(new WizAdapter({ mode: 'mock' }));
-    manager.register(new TasmotaAdapter());
+  it('mode mock tidak mengarang perangkat untuk hasil scan', async () => {
+    // Regression guard: adapter mock pernah mengembalikan sensor/lampu fiktif
+    // sehingga UI menampilkan perangkat yang tidak ada di jaringan.
+    manager.register(new MqttAdapter({ mode: 'mock' }));
+    manager.register(new TasmotaAdapter({ mode: 'mock' }));
 
-    const all = await manager.discoverAll();
-    const ids = all.map((d) => d.id);
-    expect(ids).toContain('wiz_aabbccddeeff');
-    expect(ids).toContain('tasmota_relay_01');
+    await expect(manager.discoverAll()).resolves.toEqual([]);
+    await expect(manager.discover('MQTT')).resolves.toEqual([]);
+    await expect(manager.discover('TASMOTA')).resolves.toEqual([]);
+  });
 
-    const state = await manager.executeCommand('WIZ', 'wiz_aabbccddeeff', {
+  it('tetap bisa mengeksekusi perintah pada mode mock', async () => {
+    const tasmota = new TasmotaAdapter({ mode: 'mock' });
+    manager.register(tasmota);
+
+    const state = await manager.executeCommand('TASMOTA', 'tasmota_relay_01', {
       capability: 'power',
       value: false,
     });
@@ -352,10 +357,10 @@ describe('DeviceCoreService', () => {
 
   const deviceExternal = {
     id: 'dev_external',
-    name: 'Lampu WiZ',
+    name: 'Relay Tasmota',
     homeId: 'home_1',
-    integrationId: 'int_wiz',
-    externalId: 'wiz_aabbccddeeff',
+    integrationId: 'int_tasmota',
+    externalId: 'tasmota_relay_01',
     state: { power: false, brightness: 10 },
   };
 
@@ -365,7 +370,6 @@ describe('DeviceCoreService', () => {
     activityLog: { create: ReturnType<typeof vi.fn> };
   };
   let gateway: { emitDeviceState: ReturnType<typeof vi.fn> };
-  let wiz: WizAdapter;
   let mqtt: MqttAdapter;
   let tasmota: TasmotaAdapter;
   let manager: IntegrationManager;
@@ -379,11 +383,8 @@ describe('DeviceCoreService', () => {
     };
     gateway = { emitDeviceState: vi.fn() };
     // Adapter nyata mode mock, dengan connect/disconnect di-spy.
-    wiz = new WizAdapter({ mode: 'mock' });
     mqtt = new MqttAdapter();
     tasmota = new TasmotaAdapter();
-    vi.spyOn(wiz, 'connect').mockResolvedValue(undefined);
-    vi.spyOn(wiz, 'disconnect').mockResolvedValue(undefined);
     vi.spyOn(mqtt, 'connect').mockResolvedValue(undefined);
     vi.spyOn(mqtt, 'disconnect').mockResolvedValue(undefined);
     vi.spyOn(tasmota, 'connect').mockResolvedValue(undefined);
@@ -392,21 +393,19 @@ describe('DeviceCoreService', () => {
     service = new DeviceCoreService(
       prisma as unknown as PrismaService,
       manager,
-      wiz,
       mqtt,
       tasmota,
       gateway as unknown as DeviceGateway,
     );
   });
 
-  it('onModuleInit mendaftarkan ketiga adapter lalu connect', async () => {
+  it('onModuleInit mendaftarkan kedua adapter lalu connect', async () => {
     await service.onModuleInit();
 
-    expect(manager.list()).toEqual(['WIZ', 'MQTT', 'TASMOTA']);
-    expect(manager.get('WIZ')).toBe(wiz);
+    expect(manager.list()).toEqual(['MQTT', 'TASMOTA']);
     expect(manager.get('MQTT')).toBe(mqtt);
     expect(manager.get('TASMOTA')).toBe(tasmota);
-    expect(wiz.connect).toHaveBeenCalled();
+    expect(mqtt.connect).toHaveBeenCalled();
     expect(mqtt.connect).toHaveBeenCalled();
     expect(tasmota.connect).toHaveBeenCalled();
   });
@@ -420,25 +419,25 @@ describe('DeviceCoreService', () => {
 
     await expect(service.onModuleInit()).resolves.toBeUndefined();
 
-    expect(manager.list()).toEqual(['WIZ', 'MQTT', 'TASMOTA']);
-    expect(wiz.connect).toHaveBeenCalled();
+    expect(manager.list()).toEqual(['MQTT', 'TASMOTA']);
     expect(tasmota.connect).toHaveBeenCalled();
   });
 
   it('onModuleInit tetap berhasil saat integrasi melempar non-Error', async () => {
-    vi.mocked(wiz.connect).mockRejectedValue('bukan objek Error');
+    vi.mocked(mqtt.connect).mockRejectedValue('bukan objek Error');
 
     await expect(service.onModuleInit()).resolves.toBeUndefined();
-    expect(manager.get('WIZ')).toBe(wiz);
+    expect(manager.get('MQTT')).toBe(mqtt);
+    expect(manager.get('TASMOTA')).toBe(tasmota);
   });
 
   it('onModuleInit idempoten dan onModuleDestroy disconnect semuanya', async () => {
     await service.onModuleInit();
     await service.onModuleInit();
-    expect(manager.list()).toEqual(['WIZ', 'MQTT', 'TASMOTA']);
+    expect(manager.list()).toEqual(['MQTT', 'TASMOTA']);
 
     await service.onModuleDestroy();
-    expect(wiz.disconnect).toHaveBeenCalled();
+    expect(mqtt.disconnect).toHaveBeenCalled();
     expect(mqtt.disconnect).toHaveBeenCalled();
     expect(tasmota.disconnect).toHaveBeenCalled();
   });
@@ -496,11 +495,11 @@ describe('DeviceCoreService', () => {
 
   it('perangkat eksternal dirutekan lewat manager sesuai tipe integration', async () => {
     prisma.integration.findUnique.mockResolvedValue({
-      id: 'int_wiz',
-      type: 'WIZ',
+      id: 'int_tasmota',
+      type: 'TASMOTA',
       enabled: true,
     });
-    const adapter = stubAdapter('WIZ');
+    const adapter = stubAdapter('TASMOTA');
     (adapter.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue({
       power: true,
       brightness: 77,
@@ -510,27 +509,27 @@ describe('DeviceCoreService', () => {
     const result = await service.executeCommand(deviceExternal, 'turn_on');
 
     expect(prisma.integration.findUnique).toHaveBeenCalledWith({
-      where: { id: 'int_wiz' },
+      where: { id: 'int_tasmota' },
     });
-    expect(adapter.executeCommand).toHaveBeenCalledWith('wiz_aabbccddeeff', {
+    expect(adapter.executeCommand).toHaveBeenCalledWith('tasmota_relay_01', {
       capability: 'power',
       value: true,
     });
     expect(result).toEqual({
       deviceId: 'dev_external',
       state: { power: true, brightness: 77 },
-      message: 'Lampu WiZ dinyalakan.',
+      message: 'Relay Tasmota dinyalakan.',
       external: true,
     });
   });
 
   it('state hasil adapter digabung dengan state lama perangkat', async () => {
     prisma.integration.findUnique.mockResolvedValue({
-      id: 'int_wiz',
-      type: 'WIZ',
+      id: 'int_tasmota',
+      type: 'TASMOTA',
       enabled: true,
     });
-    const adapter = stubAdapter('WIZ');
+    const adapter = stubAdapter('TASMOTA');
     (adapter.executeCommand as ReturnType<typeof vi.fn>).mockResolvedValue({
       power: true,
     });
@@ -542,11 +541,11 @@ describe('DeviceCoreService', () => {
 
   it('integration nonaktif memakai jalur internal', async () => {
     prisma.integration.findUnique.mockResolvedValue({
-      id: 'int_wiz',
-      type: 'WIZ',
+      id: 'int_tasmota',
+      type: 'TASMOTA',
       enabled: false,
     });
-    const adapter = stubAdapter('WIZ');
+    const adapter = stubAdapter('TASMOTA');
     manager.register(adapter);
 
     const result = await service.executeCommand(deviceExternal, 'turn_on');
@@ -557,11 +556,11 @@ describe('DeviceCoreService', () => {
 
   it('integration aktif tanpa externalId memakai jalur internal', async () => {
     prisma.integration.findUnique.mockResolvedValue({
-      id: 'int_wiz',
-      type: 'WIZ',
+      id: 'int_tasmota',
+      type: 'TASMOTA',
       enabled: true,
     });
-    const adapter = stubAdapter('WIZ');
+    const adapter = stubAdapter('TASMOTA');
     manager.register(adapter);
 
     const result = await service.executeCommand(
@@ -574,7 +573,7 @@ describe('DeviceCoreService', () => {
 
   it('error dari adapter diteruskan ke pemanggil tanpa menyimpan state', async () => {
     prisma.integration.findUnique.mockResolvedValue({
-      id: 'int_wiz',
+      id: 'int_tasmota',
       type: 'SHELLY',
       enabled: true,
     });
