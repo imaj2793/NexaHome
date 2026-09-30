@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationsService } from './integrations.service';
+import { ApiError } from '../common/errors/api-error';
 import {
   decryptCredentials,
   encryptCredentials,
@@ -156,5 +157,74 @@ describe('IntegrationsService — kredensial', () => {
     expect(where.home.ownerId).toBe('user_2');
     expect(where.home.ownerId).not.toBeUndefined();
     expect(prisma.integration.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('IntegrationsService — kredensial tidak terbaca', () => {
+  const PASSPHRASE = 'kunci-uji-yang-panjang-sekali';
+  const OTHER = 'kunci-lain-yang-juga-panjang-sekali';
+
+  const row = (config: unknown) => ({
+    id: 'int_1',
+    name: 'MQTT',
+    type: 'MQTT' as const,
+    homeId: 'home_1',
+    enabled: true,
+    config,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  const build = (passphrase: string) => {
+    const prisma = {
+      integration: { findFirst: vi.fn().mockResolvedValue(null) },
+      home: { findFirst: vi.fn().mockResolvedValue({ id: 'home_1' }) },
+    };
+    const config = { get: () => passphrase } as unknown as ConfigService;
+    return {
+      service: new IntegrationsService(prisma as unknown as PrismaService, config),
+      prisma,
+    };
+  };
+
+  it('kunci yang salah memberi INTEGRATION_CREDENTIALS_INVALID, bukan error kripto', async () => {
+    const { service, prisma } = build(OTHER);
+    prisma.integration.findFirst.mockResolvedValue(
+      row(encryptCredentials({ token: 'tok_rahasia' }, PASSPHRASE)),
+    );
+
+    const error = await service
+      .readCredentials('usr_1', 'int_1')
+      .then(() => null)
+      .catch((e: ApiError) => e);
+
+    expect(error).not.toBeNull();
+    expect((error as ApiError).code).toBe('INTEGRATION_CREDENTIALS_INVALID');
+    // Detail internal (nama algoritma, scrypt) tidak boleh bocor.
+    expect(JSON.stringify(error)).not.toMatch(/scrypt|aes|gcm|Unsupported state/i);
+  });
+
+  it('kunci yang benar tetap membuka kredensial', async () => {
+    const { service, prisma } = build(PASSPHRASE);
+    prisma.integration.findFirst.mockResolvedValue(
+      row(encryptCredentials({ token: 'tok_rahasia' }, PASSPHRASE)),
+    );
+
+    await expect(service.readCredentials('usr_1', 'int_1')).resolves.toEqual({
+      token: 'tok_rahasia',
+    });
+  });
+
+  it('amplop yang rusak (diubah tangan) juga ditolak, bukan diam-diam dipakai', async () => {
+    const { service, prisma } = build(PASSPHRASE);
+    const envelope = encryptCredentials({ token: 'tok' }, PASSPHRASE);
+    prisma.integration.findFirst.mockResolvedValue(
+      // Auth tag dimanipulasi → GCM harus gagal.
+      row({ ...envelope, tag: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }),
+    );
+
+    await expect(service.readCredentials('usr_1', 'int_1')).rejects.toMatchObject({
+      code: 'INTEGRATION_CREDENTIALS_INVALID',
+    });
   });
 });

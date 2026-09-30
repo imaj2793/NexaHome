@@ -106,7 +106,17 @@ export class IntegrationsService {
       // integrasi tetap jalan, tapi tidak pernah dikembalikan ke klien.
       return config;
     }
-    return decryptCredentials(config, this.passphrase());
+    try {
+      return decryptCredentials(config, this.passphrase());
+    } catch {
+      // Melempar error kripto mentah (scrypt/GCM) akan membuka detail
+      // internal; pemanggil butuh tahu itu masalah kunci, bukan bug.
+      throw new ApiError(
+        ErrorCode.INTEGRATION_CREDENTIALS_INVALID,
+        'Kredensial tidak bisa dibaca. INTEGRATION_CREDENTIALS_KEY mungkin ' +
+          'salah atau berubah sejak kredensial ini disimpan.',
+      );
+    }
   }
 
   /** config -> amplop terenkripsi. Config kosong dibiarkan `{}`. */
