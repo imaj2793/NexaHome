@@ -78,6 +78,7 @@ describe('NexaService', () => {
 
   /** Histori `messages` yang tercatat pada setiap panggilan ke provider. */
   const messageHistory: ChatMessage[][] = [];
+  let prismaStub: { device: { findMany: ReturnType<typeof vi.fn> } };
 
   beforeEach(() => {
     configValues = {
@@ -97,12 +98,21 @@ describe('NexaService', () => {
       }),
     };
     gateway = { emitNexaState: vi.fn() };
+    // Daftar perangkat milik user dikirim ke provider AI.
+    prismaStub = {
+      device: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'dev_relay', name: 'Relay Dapur', room: { name: 'Dapur' }, type: 'switch' },
+        ]),
+      },
+    };
     speechSynthesize = vi.fn().mockResolvedValue(Buffer.from('audio'));
 
     service = new NexaService(
       config as unknown as ConfigService,
       tools as never,
       gateway as unknown as DeviceGateway,
+      prismaStub as never,
     );
     (service as unknown as { speech: unknown }).speech = {
       name: 'stub',
@@ -247,7 +257,9 @@ describe('NexaService', () => {
 
       expect(result.state).toBe('ERROR');
       expect(result.tool).toEqual({ name: 'turn_on_device', success: false });
-      expect(result.message).toBe('Perangkatnya tidak ada.');
+      // Alasan kegagalan tool lebih berguna daripada jawaban model yang
+      // bertentangan dengan state ERROR.
+      expect(result.message).toBe('Perangkat tidak ditemukan.');
     });
 
     it('menangani argumen tool JSON rusak tanpa melempar error', async () => {
@@ -310,7 +322,9 @@ describe('NexaService', () => {
 
       const result = await service.chat('user_1', 'daftar perangkat');
 
-      expect(result.message).toBe('Maaf, perintah belum selesai diproses.');
+      // Alasan kegagalan dari tool kini ikut tampil ke user (bukan pesan generik),
+      // supaya masalah seperti "MQTT belum terhubung" bisa langsung dilihat.
+      expect(result.message).toBe('Gagal');
       expect(result.state).toBe('ERROR');
     });
   });
@@ -395,6 +409,7 @@ describe('NexaService', () => {
         config as unknown as ConfigService,
         tools as never,
         gateway as unknown as DeviceGateway,
+        prismaStub as never,
       );
 
       // Tanpa stubbing internal, chat memakai provider factory (mock).
@@ -449,6 +464,7 @@ describe('NexaService', () => {
         config as unknown as ConfigService,
         tools as never,
         gateway as unknown as DeviceGateway,
+        prismaStub as never,
       );
 
       const buffer = await service2.synthesize('halo');

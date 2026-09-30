@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CommandResult,
@@ -38,6 +38,8 @@ export interface NexaToolResult {
  */
 @Injectable()
 export class NexaToolsService {
+  private readonly logger = new Logger(NexaToolsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly deviceCore: DeviceCoreService,
@@ -237,9 +239,13 @@ export class NexaToolsService {
       }
     } catch (error) {
       // (2) Jangan pernah throw — tangkap semua error dan kembalikan sebagai hasil.
+      // Previously the message was swallowed here without a log, making device
+      // failures (MQTT offline, device not found, wrong ID) impossible to trace.
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Tool "${name}" gagal: ${message}`);
       return {
         success: false,
-        message: error instanceof Error ? error.message : String(error),
+        message,
         result: null,
       };
     }

@@ -3,6 +3,7 @@ import type {
   AIProvider,
   AIProviderConfig,
   ChatMessage,
+  DeviceHint,
   ToolCall,
   ToolDefinition,
 } from './chat';
@@ -47,11 +48,16 @@ export class OpenAICompatibleProvider implements AIProvider {
   async chat(params: {
     messages: ChatMessage[];
     tools?: ToolDefinition[];
+    devices?: DeviceHint[];
   }): Promise<AIChatResponse> {
+    // Daftar perangkat nyata disisipkan ke system prompt supaya model
+    // memakai device_id yang benar alih-alih mengarang ID.
+    const messages = withDeviceCatalog(params.messages, params.devices);
+
     // ToolDefinition dikirim dalam format tools OpenAI: { type: 'function', function: {...} }.
     const body = {
       model: this.config.model,
-      messages: params.messages,
+      messages,
       ...(params.tools && params.tools.length > 0
         ? {
             tools: params.tools.map((tool) => ({
@@ -100,4 +106,37 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     return { message, usage };
   }
+}
+
+/**
+ * Tambahkan katalog perangkat ke system prompt pertama.
+ * Tanpa ini model cenderung mengarang device_id yang tidak ada.
+ */
+function withDeviceCatalog(
+  messages: ChatMessage[],
+  devices?: DeviceHint[],
+): ChatMessage[] {
+  if (!devices || devices.length === 0) return messages;
+
+  const catalog = devices
+    .map((d) => {
+      const room = d.room ? ` (ruangan: ${d.room})` : '';
+      const type = d.type ? ` [${d.type}]` : '';
+      return `- ${d.id}: ${d.name}${type}${room}`;
+    })
+    .join('\n');
+
+  const text =
+    'Perangkat yang tersedia di rumah pengguna (device_id|name):\n' +
+    catalog +
+    '\nGunakan device_id dari daftar ini persis. Jangan mengarang ID.';
+
+  const first = messages[0];
+  if (!first) return [{ role: 'system', content: text }, ...messages];
+  if (first.role !== 'system') return [{ role: 'system', content: text }, ...messages];
+
+  return [
+    { ...first, content: `${first.content}\n\n${text}` },
+    ...messages.slice(1),
+  ];
 }

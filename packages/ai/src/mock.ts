@@ -3,14 +3,46 @@ import type {
   AIProvider,
   ChatMessage,
   ToolCall,
+  DeviceHint,
   ToolDefinition,
 } from './chat';
 
-/** Infer device_id dari teks perintah (ID/EN). */
-function inferDeviceId(text: string): string {
-  if (/kamar|bedroom/i.test(text)) return 'device_bedroom_light';
-  if (/ruang tamu|living/i.test(text)) return 'device_living_light';
-  return 'device_living_light';
+/**
+ * Cocokkan teks perintah dengan perangkat milik user.
+ *
+ * Sebelumnya provider mock mengembalikan ID hardcode ('device_living_light')
+ * yang tidak pernah ada di database anymore — hasil devices selalu gagal
+ * dengan "Perangkat tidak ditemukan". Sekarang nama perangkat diiocokkan
+ * dengan teks perintah; bila tidak ada yang cocok, kembalikan undefined
+ * supaya tool melaporkan "Perangkat tidak ditemukan" dengan jujur.
+ */
+function matchDevice(text: string, devices: DeviceHint[]): DeviceHint | undefined {
+  if (devices.length === 0) return undefined;
+
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const haystack = norm(text);
+
+  // Cocokkan berdasarkan nama perangkat atau nama ruangan, terpanjang dulu
+  // supaya "lampu tamu" tidak tertimpa oleh "tamu".
+  const scored = devices
+    .map((d) => {
+      const name = norm(d.name);
+      const room = d.room ? norm(d.room) : '';
+      const nameWords = name.split(' ').filter(Boolean);
+      let score = 0;
+      if (name && haystack.includes(name)) score = 100 + name.length;
+      else if (nameWords.length > 1 && nameWords.every((w) => haystack.includes(w))) {
+        score = 80 + name.length;
+      } else if (room && haystack.includes(room)) score = 60 + room.length;
+      else if (nameWords.some((w) => w.length > 3 && haystack.includes(w))) {
+        score = 20 + name.length;
+      }
+      return { device: d, score };
+    })
+    .filter((s2) => s2.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0]?.device;
 }
 
 /** Ekstrak angka pertama dari teks (untuk nilai brightness), default 60. */
@@ -52,7 +84,17 @@ export class MockAIProvider implements AIProvider {
   async chat(params: {
     messages: ChatMessage[];
     tools?: ToolDefinition[];
+    devices?: DeviceHint[];
   }): Promise<AIChatResponse> {
+    // Kalau pesan terakhir adalah hasil tool, loop tool-calling sudah
+    // menjalankan perintahnya. Tanpa pengecekan ini provider mock
+    //ebolos mengembalikan tool call yang sama lagi, sehingga satu perintah
+    // dikirim ke perangkat berulang kali (teramati 4× pada loop maxIterations).
+    const lastMessage = params.messages[params.messages.length - 1];
+    if (lastMessage?.role === 'tool') {
+      return { message: { role: 'assistant', content: 'Selesai.' } };
+    }
+
     // Intent diambil dari pesan user terakhir.
     const lastUser = [...params.messages]
       .reverse()
@@ -62,7 +104,7 @@ export class MockAIProvider implements AIProvider {
     if (/terang|redup|brightness|kecerahan/.test(text)) {
       return {
         message: toolCallMessage('set_brightness', {
-          device_id: inferDeviceId(text),
+          device_id: matchDevice(text, params.devices ?? [])?.id ?? '',
           value: inferBrightnessValue(text),
         }),
       };
@@ -71,7 +113,7 @@ export class MockAIProvider implements AIProvider {
     if (/nyalakan|turn on/.test(text)) {
       return {
         message: toolCallMessage('turn_on_device', {
-          device_id: inferDeviceId(text),
+          device_id: matchDevice(text, params.devices ?? [])?.id ?? '',
         }),
       };
     }
@@ -79,7 +121,7 @@ export class MockAIProvider implements AIProvider {
     if (/matikan|turn off/.test(text)) {
       return {
         message: toolCallMessage('turn_off_device', {
-          device_id: inferDeviceId(text),
+          device_id: matchDevice(text, params.devices ?? [])?.id ?? '',
         }),
       };
     }
@@ -93,7 +135,7 @@ export class MockAIProvider implements AIProvider {
     if (/status/.test(text)) {
       return {
         message: toolCallMessage('get_device_status', {
-          device_id: inferDeviceId(text),
+          device_id: matchDevice(text, params.devices ?? [])?.id ?? ''
         }),
       };
     }

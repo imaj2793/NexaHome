@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DeviceCoreModule } from '../device-core/device-core.module';
+import { PrismaModule } from '../prisma/prisma.module';
 import { ScenesModule } from '../scenes/scenes.module';
 import { AutomationModule } from '../automation/automation.module';
 import { EnergyModule } from '../energy/energy.module';
@@ -9,7 +10,13 @@ import { NexaToolsService } from './nexa-tools.service';
 import { SttService } from './stt.service';
 
 @Module({
-  imports: [DeviceCoreModule, ScenesModule, AutomationModule, EnergyModule],
+  imports: [
+    DeviceCoreModule,
+    ScenesModule,
+    AutomationModule,
+    EnergyModule,
+    PrismaModule,
+  ],
   controllers: [NexaController],
   providers: [NexaService, NexaToolsService, SttService],
 })

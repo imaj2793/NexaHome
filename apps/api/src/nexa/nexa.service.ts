@@ -5,9 +5,11 @@ import {
   ChatMessage,
   createAIProvider,
   createSpeechProvider,
+  DeviceHint,
   SpeechProvider,
 } from '@nexahome/ai';
 import { DeviceGateway } from '../device-core/device.gateway';
+import { PrismaService } from '../prisma/prisma.service';
 import { NexaToolsService } from './nexa-tools.service';
 
 const SYSTEM_PROMPT = [
@@ -51,7 +53,24 @@ export class NexaService {
     private readonly config: ConfigService,
     private readonly tools: NexaToolsService,
     private readonly gateway: DeviceGateway,
+    private readonly prisma: PrismaService,
   ) {}
+
+  /** Daftar perangkat milik user — dikirim ke provider AI agar tidak mengarang ID. */
+  private async deviceHints(userId: string): Promise<DeviceHint[]> {
+    const devices = await this.prisma.device.findMany({
+      where: { home: { ownerId: userId } },
+      include: { room: true },
+      orderBy: { name: 'asc' },
+      take: 100,
+    });
+    return devices.map((d) => ({
+      id: d.id,
+      name: d.name,
+      room: d.room?.name ?? null,
+      type: d.type,
+    }));
+  }
 
   private providerName(): string {
     return this.config.get<string>('AI_PROVIDER')?.trim() || 'mock';
@@ -100,12 +119,16 @@ export class NexaService {
     this.gateway.emitNexaState('', 'THINKING');
     try {
       const provider = this.getProvider();
+      const hints = await this.deviceHints(userId);
       const messages: ChatMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: message },
       ];
 
       let lastTool: { name: string; success: boolean } | undefined;
+      // Alasan kegagalan tool disimpan terpisah supaya bentuk `tool` di
+      // respons API tetap { name, success }.
+      let lastToolMessage: string | undefined;
       const maxIterations = 4;
 
       // Tool-calling multi-turn: eksekusi tool → kirim hasil ke LLM → ulangi
@@ -114,16 +137,21 @@ export class NexaService {
         const response = await provider.chat({
           messages,
           tools: this.tools.getToolDefinitions(),
+          devices: hints,
         });
         const assistant = response.message;
         messages.push(assistant);
 
         const calls = assistant.tool_calls ?? [];
         if (calls.length === 0) {
+          // Kalau tool terakhir gagal, jangan tampilkan "Selesai." dari model —
+          // itu berkontradiksi dengan state ERROR. Alasan gagalnya yang ditampilkan.
+          const failed = Boolean(lastTool && !lastTool.success);
           const result: NexaChatResult = {
-            message:
-              assistant.content || 'Maaf, saya tidak bisa menjawab itu.',
-            state: lastTool && !lastTool.success ? 'ERROR' : 'SUCCESS',
+            message: failed
+              ? (lastToolMessage || 'Maaf, perintah belum selesai diproses.')
+              : assistant.content || 'Maaf, saya tidak bisa menjawab itu.',
+            state: failed ? 'ERROR' : 'SUCCESS',
             ...(lastTool ? { tool: lastTool } : {}),
             ...(lastTool && !lastTool.success
               ? { degraded: 'tool_failed' as const }
@@ -146,6 +174,7 @@ export class NexaService {
             userId,
           });
           lastTool = { name: call.function.name, success: exec.success };
+          lastToolMessage = exec.message;
 
           messages.push({
             role: 'tool',
@@ -155,10 +184,15 @@ export class NexaService {
         }
       }
 
+      //_show the real reason to the user_. A generic "not processed" hides
+      // actionable causes like "MQTT belum terhubung" or "Perangkat tidak ditemukan".
+      const failureMessage =
+        lastTool && !lastTool.success && lastToolMessage
+          ? lastToolMessage
+          : 'Maaf, perintah belum selesai diproses.';
+
       const result: NexaChatResult = {
-        message: lastTool?.success
-          ? 'Selesai.'
-          : 'Maaf, perintah belum selesai diproses.',
+        message: lastTool?.success ? 'Selesai.' : failureMessage,
         state: lastTool && !lastTool.success ? 'ERROR' : 'SUCCESS',
         ...(lastTool ? { tool: lastTool } : {}),
       };

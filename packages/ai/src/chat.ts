@@ -39,12 +39,25 @@ export interface AIChatResponse {
   };
 }
 
+/** Perangkat nyata milik user, diteruskan ke provider agar AI memakai ID asli. */
+export interface DeviceHint {
+  id: string;
+  name: string;
+  room?: string | null;
+  type?: string;
+}
+
 /** Kontrak provider AI (chat). */
 export interface AIProvider {
   readonly name: string;
   chat(params: {
     messages: ChatMessage[];
     tools?: ToolDefinition[];
+    /**
+     * Daftar perangkat milik user. Tanpa ini, provider tidak tahu ID
+     * perangkat yang sah dan cenderung mengarang ID fiktif.
+     */
+    devices?: DeviceHint[];
   }): Promise<AIChatResponse>;
 }
 

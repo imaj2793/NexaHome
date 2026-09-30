@@ -36,6 +36,13 @@ function jsonResponse(
 describe('@nexahome/ai — MockAIProvider', () => {
   let provider: MockAIProvider;
 
+  // Daftar perangkat milik user. Provider WAJIB memakai ID dari daftar ini —
+  // sebelumnya mock mengembalikan ID hardcode yang tidak ada di database.
+  const devices = [
+    { id: 'dev_living', name: 'Lampu Ruang Tamu', room: 'Ruang Tamu' },
+    { id: 'dev_bedroom', name: 'Lampu Kamar', room: 'Kamar Tidur' },
+  ];
+
   const ask = (content: string, extra: ChatMessage[] = []) =>
     provider.chat({
       messages: [
@@ -44,6 +51,7 @@ describe('@nexahome/ai — MockAIProvider', () => {
         ...extra,
       ],
       tools,
+      devices,
     });
 
   beforeEach(() => {
@@ -54,6 +62,40 @@ describe('@nexahome/ai — MockAIProvider', () => {
     expect(provider.name).toBe('mock');
   });
 
+  it('tidak mengulang tool call setelah hasil tool masuk', async () => {
+    // Regression: mock mengulang tool call yang sama tiap iterasi sehingga
+    // satu perintah terkirim ke perangkat sampai 4 kali.
+    const first = await ask('nyalakan lampu ruang tamu');
+    const call = first.message.tool_calls?.[0];
+    expect(call).toBeDefined();
+
+    const follow = await provider.chat({
+      messages: [
+        { role: 'system', content: 'system' },
+        { role: 'user', content: 'nyalakan lampu ruang tamu' },
+        first.message,
+        { role: 'tool', tool_call_id: call!.id, content: '{"success":true}' },
+      ],
+      tools,
+      devices,
+    });
+
+    expect(follow.message.tool_calls).toBeUndefined();
+    expect(follow.message.content).toBe('Selesai.');
+  });
+
+  it('mengembalikan device_id kosong bila tidak ada perangkat yang cocok', async () => {
+    const res = await provider.chat({
+      messages: [{ role: 'user', content: 'nyalakan lampu' }],
+      tools,
+      devices: [{ id: 'dev_1', name: 'Relay Dapur' }],
+    });
+    const args = JSON.parse(res.message.tool_calls?.[0]!.function.arguments);
+    // ID kosong → tool melaporkan "Perangkat tidak ditemukan" dengan jujur,
+    // bukan mengklaim perangkat fiktif.
+    expect(args.device_id).toBe('');
+  });
+
   it('memetakan perintah nyalakan lampu ke tool turn_on_device', async () => {
     const response: AIChatResponse = await ask('nyalakan lampu kamar');
 
@@ -61,7 +103,7 @@ describe('@nexahome/ai — MockAIProvider', () => {
     expect(call?.type).toBe('function');
     expect(call?.function.name).toBe('turn_on_device');
     expect(JSON.parse(call?.function.arguments ?? '{}')).toEqual({
-      device_id: 'device_bedroom_light',
+      device_id: 'dev_bedroom',
     });
   });
 
@@ -73,7 +115,7 @@ describe('@nexahome/ai — MockAIProvider', () => {
     );
     expect(
       JSON.parse(response.message.tool_calls?.[0]?.function.arguments ?? '{}'),
-    ).toEqual({ device_id: 'device_living_light' });
+    ).toEqual({ device_id: 'dev_living' });
   });
 
   it('menerjemahkan bahasa Inggris ke tool yang sama', async () => {
@@ -92,7 +134,7 @@ describe('@nexahome/ai — MockAIProvider', () => {
     );
     expect(
       JSON.parse(response.message.tool_calls?.[0]?.function.arguments ?? '{}'),
-    ).toEqual({ device_id: 'device_bedroom_light', value: 30 });
+    ).toEqual({ device_id: 'dev_bedroom', value: 30 });
   });
 
   it('memakai nilai kecerahan default 60 bila tidak ada angka', async () => {
@@ -120,7 +162,7 @@ describe('@nexahome/ai — MockAIProvider', () => {
     );
     expect(
       JSON.parse(response.message.tool_calls?.[0]?.function.arguments ?? '{}'),
-    ).toEqual({ device_id: 'device_living_light' });
+    ).toEqual({ device_id: 'dev_living' });
   });
 
   it('memetakan permintaan scene ke activate_scene movie night', async () => {
