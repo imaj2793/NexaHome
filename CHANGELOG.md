@@ -16,6 +16,10 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ### Fixed
 
+- **Tombol mikrofon Nexa berhenti berfungsi.** Saat panel Nexa ditulis ulang,
+  `onClick` tombol rekam hilang sehingga perintah suara tidak bisa dipakai sama
+  sekali. Sekarang tertangkap test
+  (`tetap bisa mengirim pesan teks saat voice gagal`).
 - **Scan tidak lagi memalsukan perangkat.** Adapter MQTT dan Tasmota dalam mode
   `mock` kini mengembalikan array kosong. Sebelumnya scan menampilkan
   "WiZ Bulb Ruang Tamu", "Tasmota Relay", dan sensor fiktif yang tidak ada di
@@ -36,6 +40,9 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ### Removed
 
+- **Kontrol mati dihapus dari halaman login.** "Ingat saya" tidak pernah dipakai
+  dan "lupa password" tidak punya endpoint, jadi keduanya dihapus sebagai ganti
+  menampilkan tombol yang tidak melakukan apa pun.
 - **Integrasi WiZ dihapus** (`@nexahome/integration-wiz`, enum `IntegrationType.WIZ`).
   Protokol UDP port 38899 hanya berfungsi bila API berjalan langsung di jaringan
   lokal: dari dalam container, broadcast keluar tetapi balasan unicast dari lampu
@@ -80,6 +87,24 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 - Override keamanan dipindahkan ke `pnpm-workspace.yaml`
   (`postcss ^8.5.23`, `deepmerge-ts ^8.0.0`) karena pnpm 12 mengabaikan
   `pnpm.overrides` di `package.json`.
+- **UI web dirombak menjadi light-first.** Tampilan gelap-neon berbasis emoji dan
+  class hardcode diganti permukaan terang dengan satu aksen teal. Design token
+  (warna, radius, bayangan, tipografi) kini didefinisikan sekali di
+  `apps/web/app/globals.css` lewat `@theme`, jadi mengubah identitas warna cukup
+  mengedit satu blok.
+- **Dashboard memakai app shell sidebar** dengan enam section (Ringkasan, Ruang,
+  Adegan, Otomasi, Aktivitas, Integrasi). Berpindah section hanya mengubah state
+  — tidak ada route per bagian dan tidak ada reload data.
+- **Primitive UI lokal** ditambahkan di `apps/web/components/ui/` (button, card,
+  input, label, dialog, switch, badge, separator) di atas Radix UI + CVA, bukan
+  framework monolit.
+- **Device card** memakai ikon lucide-react lewat `apps/web/lib/devices.ts`
+  sebagai sumber kebenaran untuk ikon, label tipe, dan status, menggantikan emoji
+  per komponen.
+- **Modal tambah perangkat** memakai primitive Dialog sehingga fokus terkunci,
+  tombol Escape, dan scroll body ikut benar tanpa logika sendiri.
+- **Riwayat aktivitas** berubah dari modal menjadi section tersendiri.
+- `nexa-background.tsx` (partikel neon) dihapus karena tidak lagi terpakai.
 
 ### Security
 

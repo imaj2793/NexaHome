@@ -30,6 +30,7 @@ Platform smart home open-source berbasis local-first dengan kendali perangkat me
 <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
 <img src="https://img.shields.io/badge/pnpm-12-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="pnpm" />
 <img src="https://img.shields.io/badge/Tailwind-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
+<img src="https://img.shields.io/badge/Radix-UI-161616?style=flat-square&logo=radixui&logoColor=white" alt="Radix UI" />
 <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
 </p>
 
@@ -128,6 +129,7 @@ Pemisahan ini membuat:
 | Lapisan | Teknologi |
 | --- | --- |
 | **Frontend** | Next.js 15 · React 19 · TypeScript · Tailwind CSS 4 |
+| **Design System** | Radix UI primitives · CVA · lucide-react |
 | **Backend** | NestJS 12 · Passport · JWT · WebSocket · Socket.IO |
 | **Database** | PostgreSQL 16 · Prisma 6 |
 | **AI** | `@nexahome/ai` · OpenAI-compatible Provider · DeepSeek · Mock Provider |
@@ -189,6 +191,70 @@ Nexa memiliki antarmuka visual dengan **delapan ekspresi** dan sinkronisasi stat
 
 ---
 
+## Antarmuka Web
+
+Antarmuka web dibangun **light-first**: permukaan terang, satu warna aksen,
+dan hierarki lewat border tipis plus bayangan lembut. Tidak ada glow neon.
+
+### Design token
+
+Semua warna, radius, bayangan, dan tipografi didefinisikan sekali di
+[`apps/web/app/globals.css`](apps/web/app/globals.css) lewat `@theme` Tailwind.
+Mengganti identitas warna cukup mengedit blok `@theme` — bukan mencari class hex
+di puluhan komponen. Token yang tersedia:
+
+| Kelompok | Token |
+| --- | --- |
+| Permukaan | `canvas` · `surface` · `surface-muted` · `surface-sunken` |
+| Garis | `line` · `line-strong` |
+| Teks | `ink` · `ink-muted` · `ink-subtle` · `ink-inverse*` |
+| Aksen | `accent` · `accent-hover` · `accent-soft` · `accent-ink` |
+| Status | `positive` · `caution` · `critical` (+ varian `-soft`) |
+
+### App shell
+
+Dashboard memakai sidebar kiri dengan enam section. Berpindah section hanya
+mengubah state — tidak ada route per bagian dan tidak ada reload data.
+
+| Section | Isi |
+| --- | --- |
+| **Ringkasan** | Angka kondisi rumah, grid perangkat, pintasan ke section lain |
+| **Ruang** | Perangkat dikelompokkan per ruangan, plus perangkat tanpa ruangan |
+| **Adegan** | Menjalankan satu adegan (sekumpulan aksi) dengan sekali klik |
+| **Otomasi** | Aturan otomatis, status aktif, dan tombol uji manual |
+| **Aktivitas** | Jejak perubahan terakhir beserta waktu dan tingkatnya |
+| **Integrasi** | Bridge yang terdaftar dan status enkripsi kredensialnya |
+
+Panel Nexa tetap menempel di kanan sebagai rail percakapan, dan state
+`nexa.state` yang masuk ke sana juga dinaikkan ke sidebar lewat `onNexaState`
+sehingga ikon Nexa di sidebar dan di panel selalu sinkron.
+
+### Komponen
+
+Primitive berada di [`apps/web/components/ui/`](apps/web/components/ui/) —
+button, card, input, label, dialog, switch, badge, dan separator. Primitive
+Radix dipakai di balik layar: Dialog memberi fokus terkunci, tombol Escape,
+dan scroll lock, sehingga modal tidak perlu logika sendiri.
+
+Isi tiap section terpisah di
+[`apps/web/components/sections/`](apps/web/components/sections/), sementara
+`app/dashboard/page.tsx` hanya memegang state, pemanggilan API, dan koneksi
+socket.
+
+Ikon perangkat memakai lucide-react lewat
+[`apps/web/lib/devices.ts`](apps/web/lib/devices.ts) sebagai sumber
+kebenaran tunggal untuk ikon, label tipe, dan status perangkat — bukan lagi
+emoji per komponen.
+
+### Yang sengaja dijaga
+
+UI sengaja tidak menampilkan apa yang belum ada di backend. Tombol yang tidak
+punya endpoint — seperti "lupa password" — dihapus, bukan dipoles menjadi
+tombol mati. Kontrol kecerahan dan warna juga hanya muncul saat perangkat
+menyala, karena mengubahnya saat mati tidak ada artinya.
+
+---
+
 ## Nexa AI
 
 Nexa menggunakan arsitektur AI berbasis **provider abstraction** sehingga provider AI dapat diganti tanpa mengubah logika utama NexaHome.
@@ -219,11 +285,13 @@ Perangkat IoT
 
 ```text
 get_devices
+get_device_status
 turn_on_device
 turn_off_device
 set_brightness
 set_color
 set_temperature
+set_color_temperature
 get_room_status
 activate_scene
 create_automation
@@ -338,17 +406,18 @@ di mode itu selalu kosong.
      -m '{"id":"relay_dapur","name":"Relay Dapur","type":"switch","capabilities":["power"],"state":{"power":false}}'
    ```
 
-   Lalu buka **Devices → Scan**. Untuk<sup> state</sup> berkelanjutan, perangkat
-   juga mengirim state berkala ke `nexahome/devices/<id>/state` dan menerima
-   perintah di `nexahome/devices/<id>/set`.
+   Lalu buka **Ringkasan → Tambah perangkat → Scan jaringan**. Untuk state
+   berkelanjutan, perangkat juga mengirim state berkala ke
+   `nexahome/devices/<id>/state` dan menerima perintah di
+   `nexahome/devices/<id>/set`.
 
 2. **mDNS** — perangkat Tasmota/ESPHome/Shelly yang menyiarkan `_tasmota._tcp`
    dsb. Terlihat bila API berjalan di jaringan yang sama dengan perangkat
    (jalankan API secara native, atau Docker dengan `--network host` di Linux).
    Dari container bridge, multicast sering tidak menembus ke LAN.
 
-3. **Manual** — **Devices → Add device** dengan nama, tipe, dan kapabilitas.
-   Untuk Tasmota, isi IP perangkat agar status bisa dibaca.
+3. **Manual** — **Ringkasan → Tambah perangkat → Manual** dengan nama, tipe,
+   dan kapabilitas. Untuk Tasmota, isi IP perangkat agar status bisa dibaca.
 
 > **Kenapa WiZ dihapus?** Protokol UDP WiZ (port 38899) hanya bekerja bila API
 > berjalan langsung di jaringan lokal: dari container, broadcast keluar tetapi
@@ -472,6 +541,11 @@ Password: password123
 NexaHome/
 ├── apps/
 │   ├── web/                 # Frontend Next.js
+│   │   ├── app/             # Route: /, /login, /dashboard
+│   │   ├── components/
+│   │   │   ├── ui/          # Primitive (button, card, dialog, switch, …)
+│   │   │   └── sections/    # Isi tiap section dashboard
+│   │   └── lib/             # Klien API, auth, socket, token desain
 │   └── api/                 # Backend NestJS
 │
 ├── packages/
