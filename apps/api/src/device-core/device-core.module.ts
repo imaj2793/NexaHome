@@ -6,6 +6,7 @@ import type { MqttAdapterConfig } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
 import type { TasmotaAdapterConfig } from '@nexahome/integration-tasmota';
 import { AuthModule } from '../auth/auth.module';
+import { CredentialReaderModule } from '../integrations/credential-reader.module';
 import { DeviceCoreService } from './device-core.service';
 import { DeviceGateway } from './device.gateway';
 
@@ -13,7 +14,7 @@ type MqttMode = NonNullable<MqttAdapterConfig['mode']>;
 type TasmotaMode = NonNullable<TasmotaAdapterConfig['mode']>;
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, CredentialReaderModule],
   providers: [
     DeviceGateway,
     DeviceCoreService,

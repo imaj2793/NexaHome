@@ -129,6 +129,10 @@ integrasi tersebut lalu menutupnya. Konsekuensinya:
 - `discoverDevices` ke broker kedua mendengarkan pengumuman selama
   `discoveryWindowMs` (default 3 detik). Broker hanya mengumuman saat
   perangkat menyala, jadi hasil scan bisa kosong walaupun perangkat ada.
+  Scan ini yang dipakai `POST /discovery/scan`: kredensial integrasi milik user
+  yang memanggil scan diteruskan ke adapter, jadi broker kedua ikut terlihat di
+  sana. Integrasi yang kredensialnya tidak terbaca dilewati, bukan diganti
+  kredensial global.
 
 Perilaku ini diuji di `apps/api/test/adapter-credentials.spec.ts`.
 

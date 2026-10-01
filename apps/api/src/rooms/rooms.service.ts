@@ -13,7 +13,7 @@ export class RoomsService {
 
   async findAll(userId: string, homeId?: string) {
     if (homeId) {
-      await this.assertHomeOwned(userId, homeId);
+      await this.assertHomeAccessible(userId, homeId);
       return this.prisma.room.findMany({
         where: { homeId },
         include: { _count: { select: { devices: true } } },
@@ -35,21 +35,28 @@ export class RoomsService {
   }
 
   async create(userId: string, dto: CreateRoomDto) {
-    await this.assertHomeOwned(userId, dto.homeId);
+    await this.assertHomeAccessible(userId, dto.homeId);
     return this.prisma.room.create({ data: dto });
   }
 
   async update(userId: string, id: string, dto: UpdateRoomDto) {
-    await this.assertRoomOwned(userId, id);
+    await this.assertRoomAccessible(userId, id);
     return this.prisma.room.update({ where: { id }, data: dto });
   }
 
   async remove(userId: string, id: string) {
-    await this.assertRoomOwned(userId, id);
+    await this.assertRoomAccessible(userId, id);
     return this.prisma.room.delete({ where: { id } });
   }
 
-  private async assertHomeOwned(userId: string, homeId: string) {
+  /**
+   * Rumah harus milik user ATAU dianggotai user.
+   *
+   * Namanya "accessible", bukan "owned": anggota rumah boleh membuat dan
+   * mengubah ruangan (keputusan produk di `docs/authentication.md`), jadi
+   * filter di sini memang `accessibleHomeWhere`, bukan `ownerId`.
+   */
+  private async assertHomeAccessible(userId: string, homeId: string) {
     const home = await this.prisma.home.findFirst({
       where: accessibleHomeWhere(userId, homeId),
     });
@@ -57,7 +64,8 @@ export class RoomsService {
     return home;
   }
 
-  private async assertRoomOwned(userId: string, id: string) {
+  /** Sama seperti di atas: ruangan di rumah yang bisa diakses user. */
+  private async assertRoomAccessible(userId: string, id: string) {
     const room = await this.prisma.room.findFirst({
       where: { id, home: accessibleHomeFilter(userId) },
     });

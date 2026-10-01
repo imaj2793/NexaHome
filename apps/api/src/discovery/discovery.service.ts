@@ -1,8 +1,14 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { IntegrationType } from '@prisma/client';
-import { DiscoveredDevice, IntegrationManager } from '@nexahome/device-core';
+import {
+  type AdapterCredentials,
+  DiscoveredDevice,
+  IntegrationManager,
+  type IntegrationType as AdapterType,
+} from '@nexahome/device-core';
 import { Bonjour, Browser, Service } from 'bonjour-service';
-import { accessibleHomeWhere } from '../homes/home-access';
+import { accessibleHomeFilter, accessibleHomeWhere } from '../homes/home-access';
+import { CredentialReader } from '../integrations/credential-reader.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Tipe service mDNS (DNS-SD) yang di-scan — lintas vendor. */
@@ -51,22 +57,75 @@ export class DiscoveryService {
   constructor(
     private readonly manager: IntegrationManager,
     private readonly prisma: PrismaService,
+    private readonly credentials: CredentialReader,
   ) {}
 
-  async scanNetwork(timeoutMs = 4000): Promise<DiscoveredDevice[]> {
-    const [mdns, adapters] = await Promise.all([
-      this.scanMdns(timeoutMs),
-      this.manager.discoverAll(),
-    ]);
+  /**
+   * Scan jaringan: mDNS plus discovery dari tiap tipe integrasi.
+   *
+   * `userId` dipakai untuk memilih kredensial: tiap tipe integrasi memakai
+   * kredensial milik user yang memanggil scan, bukan kredensial global di env.
+   * Tanpa itu, integrasi dengan broker kedua tidak akan pernah terlihat di
+   * scan karena pengumuman perangkatnya datang ke broker itu, bukan ke broker
+   * utama.
+   *
+   * Cakupan memakai `accessibleHomeFilter` — sama dengan `connect()` di bawah —
+   * karena anggota rumah sudah boleh mengirim perintah ke perangkat rumah itu.
+   * Integrasi yang kredensialnya tidak terbaca dilewati, bukan diganti
+   * kredensial global.
+   */
+  async scanNetwork(
+    userId: string,
+    timeoutMs = 4000,
+  ): Promise<DiscoveredDevice[]> {
+    // mDNS dimulai lebih dulu, tanpa menunggu query kredensial: jendela
+    // broadcast hanya beberapa detik dan akan banyak yang terlewat kalau
+    // penemuannya ditunda.
+    const mdns = this.scanMdns(timeoutMs);
+    const adapters = this.credentialsResolver(userId).then((resolve) =>
+      this.manager.discoverAll(resolve),
+    );
+    const [fromMdns, fromAdapters] = await Promise.all([mdns, adapters]);
     const seen = new Set<string>();
     const merged: DiscoveredDevice[] = [];
-    for (const d of [...mdns, ...adapters]) {
+    for (const d of [...fromMdns, ...fromAdapters]) {
       const key = `${d.vendor ?? ''}:${d.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
       merged.push(d);
     }
     return merged;
+  }
+
+  /**
+   * Kredensial per tipe integrasi milik user yang bisa diakses.
+   *
+   * Kalau satu tipe punya beberapa integrasi, yang paling lama dibuat yang
+   * dipakai dan sisanya dicatat — memilih diam-diam akan membuat hasil scan
+   * sulit dijelaskan kalau ada yang menanyakan kenapa broker kedua tidak muncul.
+   */
+  private async credentialsResolver(
+    userId: string,
+  ): Promise<(type: AdapterType) => AdapterCredentials | undefined> {
+    const integrations = await this.prisma.integration.findMany({
+      where: { home: accessibleHomeFilter(userId) },
+      orderBy: { createdAt: 'asc' },
+      select: { type: true, config: true },
+    });
+
+    const byType = new Map<AdapterType, AdapterCredentials | undefined>();
+    for (const integration of integrations) {
+      const type = integration.type as IntegrationType;
+      if (!byType.has(type)) {
+        byType.set(type, this.credentials.tryRead(integration.config));
+        continue;
+      }
+      this.logger.warn(
+        `Ada lebih dari satu integrasi ${type}; scan memakai yang paling lama.`,
+      );
+    }
+
+    return (type) => byType.get(type);
   }
 
   async connect(userId: string, input: ConnectDeviceInput) {

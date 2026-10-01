@@ -156,6 +156,8 @@ yang belum siap:
 | Method | Path | Keterangan |
 | --- | --- | --- |
 | GET | `/activity-log?homeId=&limit=` | riwayat aktivitas |
+| POST | `/discovery/scan` | scan mDNS + adapter. Memakai kredensial integrasi milik user yang bisa diakses; integrasi yang kredensialnya rusak dilewati |
+| POST | `/discovery/connect` | simpan hasil scan ke registry (buat integrasi bila perlu) |
 | GET | `/health` | `{ status, database, timestamp }` |
 
 ---

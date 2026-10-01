@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { DiscoveryService } from './discovery.service';
 import type { IntegrationManager } from '@nexahome/device-core';
+import type { CredentialReader } from '../integrations/credential-reader.service';
 
 /** Fungsi mDNS:YD yang dipakai service, dalam bentuk yang bisa dikontrol test. */
 const findMock = vi.fn();
@@ -19,10 +20,15 @@ interface FakeBrowser {
 describe('DiscoveryService', () => {
   let prisma: {
     home: { findFirst: ReturnType<typeof vi.fn> };
-    integration: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+    integration: {
+      findFirst: ReturnType<typeof vi.fn>;
+      findMany: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
+    };
     device: { create: ReturnType<typeof vi.fn> };
   };
   let manager: { discoverAll: ReturnType<typeof vi.fn> };
+  let credentials: { read: ReturnType<typeof vi.fn>; tryRead: ReturnType<typeof vi.fn> };
   let service: DiscoveryService;
   let browsers: FakeBrowser[];
 
@@ -60,14 +66,21 @@ describe('DiscoveryService', () => {
           .mockImplementation(({ where }: { where: { id?: string; type?: string } }) =>
             Promise.resolve(where.id ? { id: where.id } : null),
           ),
+        findMany: vi.fn().mockResolvedValue([]),
         create: vi.fn().mockResolvedValue({ id: 'int_baru' }),
       },
       device: { create: vi.fn().mockResolvedValue({ id: 'dev_1' }) },
     };
     manager = { discoverAll: vi.fn().mockResolvedValue([]) };
+    credentials = {
+      read: vi.fn(),
+      // Default: config tidak terenkripsi → diteruskan apa adanya.
+      tryRead: vi.fn().mockImplementation((config: unknown) => config as Record<string, unknown>),
+    };
     service = new DiscoveryService(
       manager as unknown as IntegrationManager,
       prisma as unknown as never,
+      credentials as unknown as CredentialReader,
     );
   });
 
@@ -79,7 +92,7 @@ describe('DiscoveryService', () => {
         { id: '192.168.1.20', name: 'Shelly B', type: 'switch', capabilities: [], state: {}, vendor: 'shelly' },
       ]);
 
-      const scan = service.scanNetwork(10);
+      const scan = service.scanNetwork('user_1', 10);
       // Emulasikan dua perangkat mDNS: shelly (duplikat adapter) dan tasmota.
       emitUp(2, { addresses: ['192.168.1.20'], name: 'shelly-relay.local', host: 'shelly-relay.local' });
       emitUp(1, { host: '10.0.0.5', name: 'tasmota-plug.local' });
@@ -93,7 +106,7 @@ describe('DiscoveryService', () => {
     });
 
     it('menghentikan semua browser mDNS setelah scan selesai', async () => {
-      await service.scanNetwork(10);
+      await service.scanNetwork('user_1', 10);
 
       expect(browsers.length).toBeGreaterThan(0);
       for (const browser of browsers) {
@@ -112,9 +125,65 @@ describe('DiscoveryService', () => {
         { id: 'tasmota_1', name: 'Relay Dapur', type: 'switch', capabilities: ['power'], state: {}, vendor: 'tasmota' },
       ]);
 
-      await expect(service.scanNetwork(10)).resolves.toMatchObject([
+      await expect(service.scanNetwork('user_1', 10)).resolves.toMatchObject([
         { id: 'tasmota_1', vendor: 'tasmota' },
       ]);
+    });
+
+    it('meneruskan kredensial integrasi milik user ke adapter', async () => {
+      // Tanpa ini, integrasi dengan broker kedua tidak terlihat di scan:
+      // pengumuman perangkatnya datang ke broker itu, bukan ke broker utama.
+      prisma.integration.findMany.mockResolvedValue([
+        { type: 'MQTT', config: { url: 'mqtt://broker-kedua:1883', username: 'u2' } },
+      ]);
+
+      await service.scanNetwork('user_1', 10);
+
+      const resolve = manager.discoverAll.mock.calls[0][0] as (
+        type: string,
+      ) => unknown;
+      expect(resolve('MQTT')).toEqual({
+        url: 'mqtt://broker-kedua:1883',
+        username: 'u2',
+      });
+      // Tipe tanpa integrasi → undefined, bukan kredensial tipe lain.
+      expect(resolve('SHELLY')).toBeUndefined();
+    });
+
+    it('hanya mengambil integrasi rumah yang bisa diakses user', async () => {
+      await service.scanNetwork('user_1', 10);
+
+      const where = prisma.integration.findMany.mock.calls[0][0].where;
+      expect(where).toMatchObject({
+        home: { OR: [{ ownerId: 'user_1' }, { members: { some: { userId: 'user_1' } } }] },
+      });
+    });
+
+    it('kredensial yang tidak terbaca jadi undefined, bukan kredensial global', async () => {
+      // tryRead mengembalikan undefined untuk envelope rusak. Kalau scan memakai
+      // kredensial global sebagai cadangan, hasil scan bisa menampilkan
+      // perangkat milik integrasi orang lain.
+      prisma.integration.findMany.mockResolvedValue([
+        { type: 'MQTT', config: { envelope: 'rusak' } },
+      ]);
+      credentials.tryRead.mockReturnValue(undefined);
+
+      await service.scanNetwork('user_1', 10);
+
+      const resolve = manager.discoverAll.mock.calls[0][0] as (type: string) => unknown;
+      expect(resolve('MQTT')).toBeUndefined();
+    });
+
+    it('pakai integrasi paling lama dan mencatat ketika satu tipe dobel', async () => {
+      prisma.integration.findMany.mockResolvedValue([
+        { type: 'MQTT', config: { url: 'mqtt://lama' } },
+        { type: 'MQTT', config: { url: 'mqtt://baru' } },
+      ]);
+
+      await service.scanNetwork('user_1', 10);
+
+      const resolve = manager.discoverAll.mock.calls[0][0] as (type: string) => unknown;
+      expect(resolve('MQTT')).toEqual({ url: 'mqtt://lama' });
     });
   });
 

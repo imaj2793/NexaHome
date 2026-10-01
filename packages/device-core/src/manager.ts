@@ -53,12 +53,21 @@ export class IntegrationManager {
     return adapter.discoverDevices(credentials);
   }
 
-  /** Discovery gabungan dari SEMUA integration yang terdaftar. */
-  async discoverAll(): Promise<DiscoveredDevice[]> {
+  /**
+   * Discovery gabungan dari SEMUA integration yang terdaftar.
+   *
+   * `resolve` dipakai untuk kredensial integrasi: manager tidak menyentuh
+   * database, jadi pemanggil yang tahu kredensial milik siapa harus
+   * meneruskannya lewat callback. Tanpa `resolve`, adapter memakai kredensial
+   * global yang dibakura di env.
+   */
+  async discoverAll(
+    resolve?: (type: IntegrationType) => AdapterCredentials | undefined,
+  ): Promise<DiscoveredDevice[]> {
     const results: DiscoveredDevice[] = [];
     for (const adapter of this.adapters.values()) {
       try {
-        results.push(...(await adapter.discoverDevices()));
+        results.push(...(await adapter.discoverDevices(resolve?.(adapter.type))));
       } catch {
         // lewati adapter yang gagal — satu adapter down tak boleh gagalkan scan.
       }

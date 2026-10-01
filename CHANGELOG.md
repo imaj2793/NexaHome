@@ -16,6 +16,21 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ### Fixed
 
+- **Scan jaringan memakai kredensial global, bukan kredensial integrasi.**
+  `IntegrationManager.discoverAll()` memanggil `discoverDevices()` tanpa
+  argumen, jadi `POST /discovery/scan` tidak pernah melihat perangkat yang
+  mengumuman ke broker kedua — padahal `POST /integrations/:id/discover` sudah
+  meneruskannya dengan benar. Sekarang `discoverAll` menerima resolver kredensial
+  per tipe, dan `scanNetwork(userId)` memasok kredensial integrasi milik user
+  yang bisa diakses. Kredensial yang tidak terbaca membuat integrasi dilewati,
+  bukan diganti kredensial global yang bisa menampilkan perangkat milik orang
+  lain.
+- **`INTEGRATION_CREDENTIALS_INVALID` hilang di respons.** Jalur perintah
+  melempar `BadRequestException` biasa, yang dipetakan filter global menjadi
+  `VALIDATION_FAILED`, jadi klien tidak pernah tahu itu masalah kredensial.
+  Sekarang dilempar sebagai `ApiError` dan kode survives sampai klien. Pesannya
+  juga menyebut `INTEGRATION_CREDENTIALS_KEY`, sama seperti yang dilakukan
+  `IntegrationsService.readCredentials`.
 - **Perangkat bisa diarahkan ke ruangan milik rumah lain.** `DevicesService.update`
   menulis `roomId` tanpa memverifikasi rumah asal ruangan, dan respons device
   menyertakan `room` — jadi nama ruangan milik orang lain ikut terbaca. `create`
@@ -76,6 +91,13 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
   WebSocket termasuk event perangkat rumah lain yang tidak boleh sampai; isolasi
   HTTP antar tenant; serta kredensial integrasi yang tidak pernah kembali apa
   adanya.
+- `credential-reader.service.spec.ts` (9 test) mengunci dua perilaku
+  `CredentialReader`: kode error yang bertahan ke klien dan `tryRead` yang
+  tidak melempar error.
+- Scan jaringan punya test sendiri di `discovery.service.spec.ts`: resolver
+  kredensial benar-benar diteruskan ke adapter, hanya integrasi rumah yang bisa
+  diakses yang diambil, envelope rusak jadi `undefined`, dan integrasi dobel
+  memakai yang paling lama.
 - `apps/api/test/adapter-credentials.spec.ts` (14 test) mengunci enkripsi,
   dekripsi, dan penerusan kredensial ke adapter.
 - `test/setup.ts` menyediakan `INTEGRATION_CREDENTIALS_KEY` dummy agar env test
@@ -125,6 +147,20 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
     ulang.
   - Vitest meng-inline adapter ke source-nya; tanpa itu test menguji `dist` CJS
     yang basi dan `vi.mock` tidak meng-intercept mqtt.
+- **Method yang namanya "Owned" sekarang jujur soal filter yang dipakai.**
+  `assertHomeOwned`, `assertRoomOwned`, `assertSceneOwned`,
+  `assertAutomationOwned`, dan `assertDeviceOwned` semuanya memakai
+  `accessibleHomeFilter` — artinya anggota rumah boleh, bukan hanya pemilik.
+  Diganti jadi `*Accessible` supaya nama tidak menjanjikan akses yang tidak
+  ada. `homes.service.ensureOwned` dan `integrations.service.assertHomeOwned`
+  dibiarkan: keduanya benar-benar memakai `ownerId`.
+- Kredensial integrasi dibaca lewat `CredentialReader` yang bisa di-inject,
+  dipakai bersama oleh DeviceCore, Discovery, dan Integrations, dengan dua
+  perilaku: `read()` melempar error untuk perintah satu-perangkat, `tryRead()`
+  mengembalikan `undefined` untuk scan gabungan yang tidak boleh gagal utuh.
+- Komentar `home-access.ts` diperbarui: ia masih menyatakan anggota rumah
+  "tidak bisa melihat apa pun", padahal sudah sebaliknya sejak anggota rumah
+  mendapat kontrol penuh.
 - **Anggota rumah mendapat kontrol penuh atas isi rumah** — create, update, dan
   delete device serta room, plus kirim command. Lingkup yang tetap milik pemilik
   saja: ubah/hapus rumah, tambah/keluarkan anggota, dan seluruh operasi

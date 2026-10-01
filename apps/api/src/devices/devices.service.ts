@@ -30,7 +30,7 @@ export class DevicesService {
   ) {}
 
   async findAll(userId: string, homeId?: string, roomId?: string) {
-    if (homeId) await this.assertHomeOwned(userId, homeId);
+    if (homeId) await this.assertHomeAccessible(userId, homeId);
     return this.prisma.device.findMany({
       where: {
         home: accessibleHomeFilter(userId),
@@ -52,7 +52,7 @@ export class DevicesService {
   }
 
   async create(userId: string, dto: CreateDeviceDto) {
-    const home = await this.assertHomeOwned(userId, dto.homeId);
+    const home = await this.assertHomeAccessible(userId, dto.homeId);
     await this.assertRoomInHome(dto.roomId, home.id);
     return this.prisma.device.create({
       data: {
@@ -69,7 +69,7 @@ export class DevicesService {
   }
 
   async update(userId: string, id: string, dto: UpdateDeviceDto) {
-    const device = await this.assertDeviceOwned(userId, id);
+    const device = await this.assertDeviceAccessible(userId, id);
     // `roomId` harus milik rumah yang sama. Tanpa cek ini, perangkat bisa
     // diarahkan ke room rumah orang lain; karena respons device menyertakan
     // `room`, nama room milik orang lain ikut terbaca di sini.
@@ -89,7 +89,7 @@ export class DevicesService {
   }
 
   async remove(userId: string, id: string) {
-    await this.assertDeviceOwned(userId, id);
+    await this.assertDeviceAccessible(userId, id);
     return this.prisma.device.delete({ where: { id } });
   }
 
@@ -107,7 +107,7 @@ export class DevicesService {
     return this.deviceCore.executeCommand(device, dto.action, dto.value);
   }
 
-  private async assertHomeOwned(userId: string, homeId: string) {
+  private async assertHomeAccessible(userId: string, homeId: string) {
     const home = await this.prisma.home.findFirst({
       where: accessibleHomeWhere(userId, homeId),
     });
@@ -133,7 +133,7 @@ export class DevicesService {
     if (!room) throw new NotFoundException('Room tidak ditemukan.');
   }
 
-  private async assertDeviceOwned(userId: string, id: string) {
+  private async assertDeviceAccessible(userId: string, id: string) {
     const device = await this.prisma.device.findFirst({
       where: { id, home: accessibleHomeFilter(userId) },
     });

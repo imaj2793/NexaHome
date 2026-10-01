@@ -4,9 +4,11 @@ import { ErrorCode } from '../common/errors/error-codes';
 /**
  * Filter akses rumah (spec §12).
  *
- * `HomeMember` sudah ada di schema tapi tidak pernah dipakai untuk otorisasi —
- * semua query memakai `ownerId`, sehingga anggota rumah non-owner tidak bisa
- * melihat apa pun milik rumah yang dianggotainya.
+ * `HomeMember` dipakai untuk otorisasi: user bisa mengakses rumah yang ia
+ * miliki **dan** rumah yang dianggotainya. Anggota punya kontrol penuh atas isi
+ * rumah (device, room, command) — lihat `docs/authentication.md` — sedangkan
+ * ubah/hapus rumah, kelola anggota, dan seluruh operasi integrasi tetap
+ * milik pemilik saja lewat `assertOwner`.
  *
  * Fungsi ini dipakai sebagai filter `home:` di query Prisma mana pun, sehingga
  * menambah integration atau resource baru tidak akan meloloskan akses hanya

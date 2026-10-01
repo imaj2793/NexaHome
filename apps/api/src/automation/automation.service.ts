@@ -61,7 +61,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   // ---------- CRUD ----------
 
   async list(userId: string, homeId?: string) {
-    if (homeId) await this.assertHomeOwned(userId, homeId);
+    if (homeId) await this.assertHomeAccessible(userId, homeId);
     return this.prisma.automation.findMany({
       where: {
         home: accessibleHomeFilter(userId),
@@ -82,7 +82,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   }
 
   async create(userId: string, dto: CreateAutomationDto) {
-    await this.assertHomeOwned(userId, dto.homeId);
+    await this.assertHomeAccessible(userId, dto.homeId);
     return this.prisma.automation.create({
       data: {
         name: dto.name,
@@ -106,9 +106,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   }
 
   async update(userId: string, id: string, dto: UpdateAutomationDto) {
-    await this.assertAutomationOwned(userId, id);
+    await this.assertAutomationAccessible(userId, id);
     if (dto.homeId !== undefined) {
-      await this.assertHomeOwned(userId, dto.homeId);
+      await this.assertHomeAccessible(userId, dto.homeId);
     }
 
     const data: Prisma.AutomationUpdateInput = {
@@ -144,7 +144,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
   }
 
   async remove(userId: string, id: string) {
-    await this.assertAutomationOwned(userId, id);
+    await this.assertAutomationAccessible(userId, id);
     return this.prisma.automation.delete({ where: { id } });
   }
 
@@ -236,7 +236,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     return `${hh}:${mm}`;
   }
 
-  private async assertHomeOwned(userId: string, homeId: string) {
+  private async assertHomeAccessible(userId: string, homeId: string) {
     const home = await this.prisma.home.findFirst({
       where: accessibleHomeWhere(userId, homeId),
     });
@@ -244,7 +244,7 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
     return home;
   }
 
-  private async assertAutomationOwned(userId: string, id: string) {
+  private async assertAutomationAccessible(userId: string, id: string) {
     const automation = await this.prisma.automation.findFirst({
       where: { id, home: accessibleHomeFilter(userId) },
     });

@@ -11,7 +11,10 @@ import {
 } from '@nexahome/device-core';
 import { MqttAdapter } from '@nexahome/integration-mqtt';
 import { TasmotaAdapter } from '@nexahome/integration-tasmota';
+import type { ConfigService } from '@nestjs/config';
+import { ApiError } from '../src/common/errors/api-error';
 import { encryptCredentials } from '../src/integrations/credential-crypto';
+import { CredentialReader } from '../src/integrations/credential-reader.service';
 import { DeviceCoreService } from '../src/device-core/device-core.service';
 import { DeviceGateway } from '../src/device-core/device.gateway';
 import type { PrismaService } from '../src/prisma/prisma.service';
@@ -423,7 +426,9 @@ describe('DeviceCoreService', () => {
       mqtt,
       tasmota,
       gateway as unknown as DeviceGateway,
-      { get: () => 'kunci-uji-yang-panjang-sekali' } as ConfigService,
+      new CredentialReader({
+        get: () => 'kunci-uji-yang-panjang-sekali',
+      } as ConfigService),
     );
   });
 
@@ -596,8 +601,12 @@ describe('DeviceCoreService', () => {
         .catch((e: unknown) => e as HttpException);
 
       expect(error.getStatus()).toBe(400);
+      // Kode harus bertahan sampai klien. `BadRequestException` biasa akan
+      // dipetakan filter global jadi `VALIDATION_FAILED`.
+      expect((error as ApiError).code).toBe('INTEGRATION_CREDENTIALS_INVALID');
       expect(error.getResponse()).toMatchObject({
-        code: 'INTEGRATION_CREDENTIALS_INVALID',
+        success: false,
+        error: { code: 'INTEGRATION_CREDENTIALS_INVALID' },
       });
       expect(adapter.executeCommand).not.toHaveBeenCalled();
     });

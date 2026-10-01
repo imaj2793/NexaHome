@@ -19,7 +19,7 @@ export class ScenesService {
   ) {}
 
   async list(userId: string, homeId?: string) {
-    if (homeId) await this.assertHomeOwned(userId, homeId);
+    if (homeId) await this.assertHomeAccessible(userId, homeId);
     return this.prisma.scene.findMany({
       where: {
         home: accessibleHomeFilter(userId),
@@ -40,7 +40,7 @@ export class ScenesService {
   }
 
   async create(userId: string, dto: CreateSceneDto) {
-    await this.assertHomeOwned(userId, dto.homeId);
+    await this.assertHomeAccessible(userId, dto.homeId);
     return this.prisma.scene.create({
       data: {
         name: dto.name,
@@ -57,9 +57,9 @@ export class ScenesService {
   }
 
   async update(userId: string, id: string, dto: UpdateSceneDto) {
-    await this.assertSceneOwned(userId, id);
+    await this.assertSceneAccessible(userId, id);
     if (dto.homeId !== undefined) {
-      await this.assertHomeOwned(userId, dto.homeId);
+      await this.assertHomeAccessible(userId, dto.homeId);
     }
     return this.prisma.scene.update({
       where: { id },
@@ -83,7 +83,7 @@ export class ScenesService {
   }
 
   async remove(userId: string, id: string) {
-    await this.assertSceneOwned(userId, id);
+    await this.assertSceneAccessible(userId, id);
     return this.prisma.scene.delete({ where: { id } });
   }
 
@@ -121,7 +121,7 @@ export class ScenesService {
     return { message: 'Scene berhasil dijalankan.', results };
   }
 
-  private async assertHomeOwned(userId: string, homeId: string) {
+  private async assertHomeAccessible(userId: string, homeId: string) {
     const home = await this.prisma.home.findFirst({
       where: accessibleHomeWhere(userId, homeId),
     });
@@ -129,7 +129,7 @@ export class ScenesService {
     return home;
   }
 
-  private async assertSceneOwned(userId: string, id: string) {
+  private async assertSceneAccessible(userId: string, id: string) {
     const scene = await this.prisma.scene.findFirst({
       where: { id, home: accessibleHomeFilter(userId) },
     });

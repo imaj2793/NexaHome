@@ -9,10 +9,10 @@ import { ConnectDeviceDto } from './dto/connect-device.dto';
 export class DiscoveryController {
   constructor(private readonly discovery: DiscoveryService) {}
 
-  /** Scan jaringan universal: mDNS + semua integration terdaftar. */
+  /** Scan jaringan universal: mDNS + semua integration yang bisa diakses. */
   @Post('scan')
-  scan() {
-    return this.discovery.scanNetwork();
+  scan(@CurrentUser() user: CurrentUserData) {
+    return this.discovery.scanNetwork(user.id);
   }
 
   /** Hubungkan perangkat yang ditemukan (buat integrasi bila perlu). */
