@@ -16,6 +16,17 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ### Fixed
 
+- **Kredensial integrasi yang kosong membuat broker menolak dengan `not authorised`.**
+  `MqttAdapter.resolveTarget()` membandingkan kredensial integrasi dengan kredensial
+  global apa adanya, sehingga integrasi yang tidak menyimpan `brokerUrl`/`username`
+  sendiri dianggap "broker lain" lalu dibuka lewat koneksi sekali pakai **tanpa**
+  username. Di listener plaintext anonymous ini lolos diam-diam; setelah listener
+  8883/443 dibuat ber-password, setiap `POST /integrations/:id/discover` gagal dan
+  `POST /devices/:id/commands` tidak pernah sampai ke broker. Sekarang kredensial
+  yang tidak diisi berarti "pakai yang global" — sesuai komentar yang sudah ada di
+  kode — dan koneksi tetap ke primary. Test regresi:
+  `kredensial kosong berarti pakai kredensial global, bukan tanpa kredensial`.
+
 - **Scan jaringan memakai kredensial global, bukan kredensial integrasi.**
   `IntegrationManager.discoverAll()` memanggil `discoverDevices()` tanpa
   argumen, jadi `POST /discovery/scan` tidak pernah melihat perangkat yang
@@ -83,6 +94,24 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 
 ### Added
+
+- **Listener broker MQTT memakai TLS dan password.**
+  Compose punya tiga listener dengan batas jelas: `mqtt://` di 1883 (hanya
+  loopback host dan jaringan internal compose), `mqtts://` di 8883, dan `wss://`
+  yang dipublish sebagai 443 di host. Dua listener terakhir mewajibkan
+  password; CA dan private key tidak pernah masuk container API, dan private key
+  CA tidak di-mount ke broker.
+  `./scripts/mqtt-tls.sh` membuat CA lokal terpisah dari sertifikat server
+  (sertifikat self-signed tidak bisa menjadi trust anchor dirinya sendiri, jadi
+  perangkat akan menolaknya), lalu menerbitkan sertifikat dengan SAN `localhost`, `mosquitto`,
+  `mqtt`, `nexahome`, dan hostname host, membangkitkan password, lalu menuliskannya
+  ke `.env`. WebSocket plaintext di 9001 dihapus.
+  `MqttAdapter` menerima `tlsRejectUnauthorized`/`tlsCa`/`tlsCert`/`tlsKey` dan
+  meneruskannya ke koneksi utama maupun sekali pakai, hanya pada skema URL
+  terenkripsi; `rejectUnauthorized=false` pada `mqtt://` ditolak saat start.
+  API membaca CA dari `MQTT_TLS_CA_PATH` (mqtt.js menerima isi PEM, bukan nama
+  file) dan memverifikasi sertifikat broker sungguhan. 14 test baru di
+  `apps/api/test/mqtt-tls.spec.ts` dan `mqtt-tls-env.spec.ts`.
 
 - **E2E keamanan dijalankan terhadap API sungguhan** (`apps/api/test/security.e2e-spec.ts`,
   19 test) lewat socket.io-client dan supertest, menggantikan verifikasi manual

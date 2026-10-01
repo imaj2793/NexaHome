@@ -398,10 +398,21 @@ Scan **hanya menampilkan perangkat yang benar-benar ada di jaringan Anda**.
 Tidak ada data simulasi: mode `mock` berarti "tidak ada koneksi", dan scan
 di mode itu selalu kosong.
 
-1. **MQTT** — perangkat (atau bridge Tasmota → MQTT) mengumumkan dirinya:
+1. **MQTT** — perangkat (atau bridge Tasmota → MQTT) mengumumkan dirinya.
+   Broker sudah memakai TLS, jadi perintah dari host cukup lewat 1883 di
+   loopback; dari luar mesin pakai `mqtts://localhost:8883` dengan CA dan
+   kredensial broker:
 
    ```bash
+   # announce dari dalam container broker (loopback plaintext)
    docker compose exec mqtt mosquitto_pub -h 127.0.0.1 \
+     -t 'nexahome/discovery' \
+     -m '{"id":"relay_dapur","name":"Relay Dapur","type":"switch","capabilities":["power"],"state":{"power":false}}'
+
+   # dari host, lewat TLS
+   docker compose exec mqtt mosquitto_pub -h localhost -p 8883 \
+     --cafile /mosquitto/certs/../../ca/ca.crt \
+     -u nexahome -P "$MQTT_PASSWORD" \
      -t 'nexahome/discovery' \
      -m '{"id":"relay_dapur","name":"Relay Dapur","type":"switch","capabilities":["power"],"state":{"power":false}}'
    ```
@@ -504,10 +515,14 @@ Untuk mencoba NexaHome tanpa setup Node.js, jalankan seluruh stack dengan satu p
 ```bash
 cp .env.example .env
 # ganti JWT_SECRET dengan nilai acak:  openssl rand -hex 32
+./scripts/mqtt-tls.sh      # CA + sertifikat broker + password (wajib sebelum up)
 docker compose up -d --build
 ```
 
 Dashboard tersedia di http://localhost:3000, API di http://localhost:3001/api.
+Broker MQTT punya tiga listener: `mqtt://localhost:1883` (loopback), `mqtts://localhost:8883`,
+dan `wss://localhost:443` — dua terakhir butuh CA dari `./scripts/mqtt-tls.sh`.
+
 Panduan lengkap (TLS, backup, upgrade, troubleshooting) ada di
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 

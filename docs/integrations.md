@@ -47,7 +47,30 @@ hanya cache `discovered` dan `lastSeen` di memori.
 
 ### Kredensial broker
 
-`MQTT_USERNAME` dan `MQTT_PASSWORD` diteruskan ke `mqtt.connect()`.
+`MQTT_USERNAME` dan `MQTT_PASSWORD` diteruskan ke `mqtt.connect()`. Untuk broker
+compose, keduanya dibuat oleh `scripts/mqtt-tls.sh`; listener 8883 dan 443
+menolak koneksi tanpa password.
+
+Kredensial per integrasi yang kosong berarti **"pakai yang global"**, bukan
+"tanpa kredensial" — termasuk URL yang sama dengan `MQTT_URL`. Kalau tidak,
+adapter membuka koneksi sekali pakai tanpa username dan broker membalas
+`not authorised`.
+
+### TLS
+
+Opsi TLS ikut ke semua koneksi (utama dan sekali pakai), dan hanya bila skema
+URL-nya terenkripsi (`mqtts://`, `wss://`):
+
+| Env | Mqtt.js | Isi |
+| --- | --- | --- |
+| `MQTT_TLS_CA_PATH` | `ca` | path file CA, dibaca sekali saat API start |
+| `MQTT_TLS_CA` | `ca` | PEM inline kalau file tidak bisa di-mount |
+| `MQTT_TLS_REJECT_UNAUTHORIZED` | `rejectUnauthorized` | `true`/`false`; kosong = default (verifikasi aktif) |
+| `MQTT_TLS_CERT` | `cert` | sertifikat klien (mTLS) |
+| `MQTT_TLS_KEY` | `key` | kunci klien (mTLS) |
+
+`MQTT_TLS_REJECT_UNAUTHORIZED=false` hanya sah pada URL ber-TLS; pada `mqtt://`
+API gagal start karena kanalnya memang tidak terenkripsi.
 `MQTT_MODE` (`auto|mqtt|mock`, default `auto`) memanggil `scan()` dari adapter
 yang aktif; `mock` mengembalikan `[]` — bukan perangkat contoh. Tidak ada lagi
 entri discovery palsu dari mode mock.

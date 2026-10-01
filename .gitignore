@@ -14,6 +14,12 @@ coverage/
 .env.local
 .env.*.local
 
+# MQTT broker: private key, sertifikat, dan password file.
+# Dibuat oleh scripts/mqtt-tls.sh, tidak boleh masuk repo.
+docker/mosquitto/certs/
+docker/mosquitto/ca/
+docker/mosquitto/config/passwd
+
 # logs
 *.log
 npm-debug.log*

@@ -1,4 +1,5 @@
 import mqtt, { MqttClient } from 'mqtt';
+import type { IClientOptions } from 'mqtt';
 import {
   AdapterCredentials,
   DiscoveredDevice,
@@ -21,6 +22,19 @@ export interface MqttAdapterConfig {
   username?: string;
   /** Password broker. */
   password?: string;
+  /**
+   * Verifikasi sertifikat broker (default `true`).
+   *
+   * `false` hanya berguna untuk broker lokal dengan sertifikat self-signed yang
+   * belum dipercaya perangkat. Koneksi tetap terenkripsi, tapi tidak ada yang
+   * membuktikan identitas broker. Jangan pakai di produksi.
+   */
+  tlsRejectUnauthorized?: boolean;
+  /** CA khusus untuk memverifikasi sertifikat broker (format PEM). */
+  tlsCa?: string;
+  /** Sertifikat klien dan private key-nya, kalau broker meminta mTLS. */
+  tlsCert?: string;
+  tlsKey?: string;
   /** Masa berlaku penemuan (ms). Default 120 detik. */
   discoveryTtlMs?: number;
   /**
@@ -35,6 +49,51 @@ export interface MqttAdapterConfig {
 type MqttMode = 'mock' | 'mqtt';
 
 const MQTT_MODES: readonly MqttMode[] = ['mock', 'mqtt'];
+
+/**
+ * Opsi TLS yang diteruskan ke mqtt.js.
+ *
+ * Memakai tipe pustaka supaya opsi baru dari mqtt.js tidak perlu dicatat ulang
+ * di sini.
+ */
+type MqttTlsOptions = Pick<
+  IClientOptions,
+  'rejectUnauthorized' | 'ca' | 'cert' | 'key'
+>;
+
+/** Skema URL yang berarti koneksi terenkripsi. */
+const SECURE_SCHEMES = new Set([
+  'mqtts:',
+  'wss:',
+  'wsss:',
+  'tls:',
+  'ssl:',
+  'https:',
+]);
+
+/** Apakah URL ini memakai koneksi terenkripsi? */
+function isSecureUrl(url?: string): boolean {
+  if (!url) return false;
+  const match = /^([a-z0-9+.-]+):/i.exec(url);
+  return match ? SECURE_SCHEMES.has(`${match[1].toLowerCase()}:`) : false;
+}
+
+/**
+ * Rakit opsi TLS dari config, membuang key yang tidak diisi.
+ *
+ * `undefined` tidak diteruskan: mqtt.js melihat keberadaan key `ca` dan `cert`,
+ * jadi config yang kosong harus benar-benar hilang dari objek.
+ */
+function buildTlsOptions(config: MqttAdapterConfig): MqttTlsOptions {
+  const options: MqttTlsOptions = {};
+  if (config.tlsRejectUnauthorized !== undefined) {
+    options.rejectUnauthorized = config.tlsRejectUnauthorized;
+  }
+  if (config.tlsCa) options.ca = config.tlsCa;
+  if (config.tlsCert) options.cert = config.tlsCert;
+  if (config.tlsKey) options.key = config.tlsKey;
+  return options;
+}
 
 /** Timeout publish — tanpa ini MQTTv3 tidak pernah memberi callback error. */
 const PUBLISH_TIMEOUT_MS = 5_000;
@@ -62,6 +121,8 @@ interface ResolvedConfig {
   /** Kredensial broker; dipakai kalau broker tidak mengizinkan anonymous. */
   username?: string;
   password?: string;
+  /** Opsi TLS hasil normalisasi, diteruskan apa adanya ke mqtt.js. */
+  tls: MqttTlsOptions;
   /**
    * Berapa lama perangkat tetap dilaporkan hasil scan sejak pesan terakhirnya.
    * Default 120 detik. Tanpa ini, perangkat yang dihapus/dimatikan tetap
@@ -157,13 +218,47 @@ export class MqttAdapter implements IntegrationAdapter {
       // `||` bukan `??`: env yang dikosongkan di .env tetap string "".
       discoveryTtlMs: Number(config.discoveryTtlMs) || 120_000,
       discoveryWindowMs: Number(config.discoveryWindowMs) || 3_000,
+      tls: buildTlsOptions(config),
     };
+    this.assertTlsSettingsAreSane();
     if (this.config.mode === 'mqtt' && !this.config.url) {
       throw new Error(
         'Mode "mqtt" memerlukan `url` broker (mis. mqtt://localhost:1883).',
       );
     }
     if (this.config.mode === 'mock') this.seedMock();
+  }
+
+  /**
+   * `tlsRejectUnauthorized: false` tanpa TLS bukan cuma tidak berguna: opsi itu
+   * terlihat seperti lupa dikonfigurasi, padahal diam-diam melemahkan koneksi.
+   * Dicek saat start supaya kesalahan konfigurasi ketahuan sekarang, bukan
+   * nanti saat perangkat tidak merespons.
+   */
+  private assertTlsSettingsAreSane(): void {
+    if (this.config.tls.rejectUnauthorized !== false) return;
+    if (this.config.mode === 'mqtt' && !isSecureUrl(this.config.url)) {
+      throw new Error(
+        'MQTT_TLS_REJECT_UNAUTHORIZED=false hanya boleh dipakai pada URL ' +
+          'ber-TLS (mqtts:// atau wss://). Koneksi mqtt:// tidak punya ' +
+          'sertifikat yang bisa diverifikasi.',
+      );
+    }
+  }
+
+  /**
+   * Gabungkan kredensial dan opsi TLS untuk satu koneksi.
+   *
+   * Opsi TLS hanya ikut kalau skema URL-nya aman. Mengirim
+   * `rejectUnauthorized` ke koneksi biasa tidak berguna dan hanya menambah
+   * bindir yang membingungkan saat debugging.
+   */
+  private connectOptions(
+    credentials: IClientOptions,
+    url?: string,
+  ): IClientOptions {
+    if (!isSecureUrl(url)) return credentials;
+    return { ...credentials, ...this.config.tls };
   }
 
   // ── kontrak IntegrationAdapter ─────────────────────────
@@ -228,9 +323,12 @@ export class MqttAdapter implements IntegrationAdapter {
   ): Promise<DiscoveredDevice[]> {
     const client = mqtt.connect(
       target.url!,
-      target.username && target.password
-        ? { username: target.username, password: target.password }
-        : {},
+      this.connectOptions(
+        target.username && target.password
+          ? { username: target.username, password: target.password }
+          : {},
+        target.url,
+      ),
     );
     try {
       return await new Promise<DiscoveredDevice[]>((resolve, reject) => {
@@ -400,14 +498,35 @@ export class MqttAdapter implements IntegrationAdapter {
     const effectiveUrl = url ?? this.config.url;
     if (!effectiveUrl) return empty;
 
+    // Kredensial yang tidak diisi integrasi berarti "pakai yang global" HANYA untuk
+    // broker yang sama. Tanpa fallback ini, integrasi yang tidak menyimpan URL
+    // sendiri dianggap broker asing lalu dibuka lewat koneksi sekali pakai
+    // tanpa username — yang ditolak broker ber-password (dan dulu lolos
+    // diam-diam di listener plaintext anonymous).
+    //
+    // Untuk broker lain, kredensial global justru TIDAK boleh ikut: itu
+    // password broker kita yang akan dikirim ke host yang bukan milik kita.
+    const onPrimaryBroker = effectiveUrl === this.config.url;
+    const effectiveUsername = onPrimaryBroker
+      ? (username ?? this.config.username)
+      : username;
+    const effectivePassword = onPrimaryBroker
+      ? (password ?? this.config.password)
+      : password;
+
     const sameBroker =
-      effectiveUrl === this.config.url &&
-      (username ?? undefined) === this.config.username &&
-      (password ?? undefined) === this.config.password;
+      onPrimaryBroker &&
+      effectiveUsername === this.config.username &&
+      effectivePassword === this.config.password;
 
     return sameBroker
       ? empty
-      : { isPrimary: false, url: effectiveUrl, username, password };
+      : {
+          isPrimary: false,
+          url: effectiveUrl,
+          username: effectiveUsername,
+          password: effectivePassword,
+        };
   }
 
   /**
@@ -426,9 +545,12 @@ export class MqttAdapter implements IntegrationAdapter {
   ): Promise<void> {
     const client = mqtt.connect(
       target.url!,
-      target.username && target.password
-        ? { username: target.username, password: target.password }
-        : {},
+      this.connectOptions(
+        target.username && target.password
+          ? { username: target.username, password: target.password }
+          : {},
+        target.url,
+      ),
     );
     try {
       await new Promise<void>((resolve, reject) => {
@@ -455,9 +577,12 @@ export class MqttAdapter implements IntegrationAdapter {
   ): Promise<Record<string, unknown>> {
     const client = mqtt.connect(
       target.url!,
-      target.username && target.password
-        ? { username: target.username, password: target.password }
-        : {},
+      this.connectOptions(
+        target.username && target.password
+          ? { username: target.username, password: target.password }
+          : {},
+        target.url,
+      ),
     );
     try {
       return await new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -537,7 +662,10 @@ export class MqttAdapter implements IntegrationAdapter {
               password: this.config.password,
             }
           : {};
-      const client = mqtt.connect(this.config.url!, credentials);
+      const client = mqtt.connect(
+        this.config.url!,
+        this.connectOptions(credentials, this.config.url),
+      );
       this.client = client;
 
       client.on('error', reject);

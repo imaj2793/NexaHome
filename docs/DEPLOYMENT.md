@@ -12,7 +12,7 @@ Docker Compose. Untuk pengembangan lokal, lihat [`DEVELOPMENT.md`](DEVELOPMENT.m
 | Layanan | Peran | Port host |
 | --- | --- | --- |
 | `postgres` | Database (PostgreSQL 16) | 5432 |
-| `mqtt` | Broker MQTT (Eclipse Mosquitto) | 1883 |
+| `mqtt` | Broker MQTT (Eclipse Mosquitto) | 1883 (loopback), 8883 (TLS), 443 (TLS + WebSocket) |
 | `migrate` | Menjalankan Prisma `migrate deploy` lalu berhenti | — |
 | `api` | NestJS API | 3001 |
 | `web` | Dashboard Next.js | 3000 |
@@ -26,7 +26,8 @@ Urutan startup dijamin oleh healthcheck: `api` baru start setelah `postgres` dan
 
 - Docker Engine 24+ dengan plugin `compose` (atau Colima di macOS).
 - Minimal 2 vCPU dan 4 GB RAM (disarankan 4 vCPU / 8 GB).
-- Port 3000, 3001, 5432, dan 1883 yang tidak sedang dipakai.
+- Port 3000, 3001, 5432, 443, dan 8883 yang tidak sedang dipakai.
+- `openssl` di host untuk `./scripts/mqtt-tls.sh` (§3a).
 - Certificate TLS bila ingin mengekspos dashboard ke internet (lihat §7).
 
 ---
@@ -50,7 +51,7 @@ JWT_SECRET="$(openssl rand -hex 32)"
 POSTGRES_PASSWORD="<password-kuat>"
 ```
 
-Lalu jalankan:
+Siapkan TLS broker (§3a) sebelum menyalakan apa pun, lalu jalankan:
 
 ```bash
 docker compose up -d --build
@@ -62,6 +63,58 @@ layanan. Untuk melihat progres:
 ```bash
 docker compose logs -f migrate
 ```
+
+---
+
+## 3a. TLS broker MQTT
+
+Broker dalam compose punya tiga listener, tiga tujuan berbeda:
+
+| Listener | Port host | Auth | Untuk siapa |
+| --- | --- | --- | --- |
+| `mqtt://` | 1883 (loopback saja) | tanpa | debug di host, jaringan internal compose |
+| `mqtts://` | 8883 | password | perangkat Tasmota/ESPHome dan skrip |
+| `wss://` | 443 | password | browser dan klien yang hanya boleh lewat port standar |
+
+Listener TLS tidak bisa start sebelum sertifikat dan password file ada:
+
+```bash
+./scripts/mqtt-tls.sh
+```
+
+Script itu membuat tiga hal:
+
+| File | Isi | Dipakai siapa |
+| --- | --- | --- |
+| `docker/mosquitto/ca/ca.{crt,key}` | CA lokal 10 tahun | perangkat & API (CA publik saja) |
+| `docker/mosquitto/certs/server.{crt,key}` | sertifikat server + chain | broker |
+| `docker/mosquitto/config/passwd` | password hash | broker |
+
+Semua file itu diabaikan Git. `MQTT_USERNAME` dan `MQTT_PASSWORD` dibangkitkan
+script dan ditulis ke `.env`; compose meneruskannya ke broker dan API.
+
+CA dan sertifikat server sengaja dipisah: sertifikat self-signed tidak bisa
+menjadi trust anchor dirinya sendiri, jadi perangkat akan menolaknya meski
+sertifikatnya sudah dipasang sebagai CA. Dengan pemisahan itu, perangkat cukup
+memasang `docker/mosquitto/ca/ca.crt` dan sertifikat server bisa diganti
+sepanjang masa pakai CA.
+
+Verifikasi:
+
+```bash
+openssl s_client -connect localhost:8883 -CAfile docker/mosquitto/ca/ca.crt
+```
+
+Untuk hostnames di luar `localhost`, `mosquitto`, dan `mqtt`, tambahkan saat
+membuat sertifikat:
+
+```bash
+./scripts/mqtt-tls.sh --force --sans perangkat.lan 192.168.1.20
+```
+
+Untuk produksi, ganti CA lokal dengan CA publik (mis. Let's Encrypt) dan arahkan
+`certfile`/`keyfile` di `docker/mosquitto/config/mosquitto.conf` ke sertifikat
+itu. Private key CA lokal tidak pernah masuk container broker maupun API.
 
 ---
 
@@ -223,9 +276,11 @@ Setelah memakai reverse proxy:
 3. Set `NEXT_PUBLIC_API_URL="https://nexahome.example.com/api"`, lalu build ulang
    service web.
 
-MQTT broker dalam compose **tidak** memakai TLS dan sebaiknya tidak dipublikasikan.
-Untuk perangkat di luar jaringan rumah, gunakan VPN (mis. WireGuard/Tailscale)
-atau broker MQTT dengan TLS.
+Listener broker sudah memakai TLS (§3a), jadi perangkat di luar jaringan rumah
+tetap wajib membawa trust anchor — CA lokal dari `scripts/mqtt-tls.sh`, atau CA
+publik kalau sertifikatnya ditandatangani CA publik. Kalau perangkat tidak bisa
+memasang CA (mis. ESPHome lama), gebruik VPN (WireGuard/Tailscale) sebagai
+ganti: TLS hanya melindungi kanal, bukan mekanisme autentikasi perangkat.
 
 ---
 
@@ -269,6 +324,9 @@ Baca `CHANGELOG.md` untuk daftar perubahan antar versi.
 | `migrate` keluar dengan kode != 0 | Jalankan `docker compose logs migrate`; biasanya `DATABASE_URL` salah atau port 5432 bentrok |
 | Web 502 / dashboard kosong | `NEXT_PUBLIC_API_URL` tidak sesuai; set lalu `docker compose up -d --build web` |
 | Log `Integrasi MQTT gagal connect` | Broker belum siap atau URL salah. API tetap jalan; cek `docker compose logs mqtt` |
+| Log broker `cannot load certificate file` / `unable to load password file` | `./scripts/mqtt-tls.sh` belum dijalankan, atau cert/passwd terhapus. Jalankan script lalu `docker compose restart mqtt` |
+| MQTT `not authorised` di log broker | Username/password tidak cocok dengan password file. `MQTT_PASSWORD` di `.env` harus sama dengan yang dipakai script; kalau berganti, jalankan `./scripts/mqtt-tls.sh --force` |
+| `self-signed certificate in certificate chain` dari API/perangkat | CA belum dipercaya. Tambahkan `docker/mosquitto/ca/ca.crt` ke perangkat, atau set `MQTT_TLS_CA_PATH` ke CA yang benar |
 | `CORS` diblokir browser | `CORS_ORIGIN` tidak memuat origin dashboard (tanpa garis slash di akhir) |
 | Image build gagal di `prisma generate` | Cache Docker rusak: `docker builder prune -a` lalu build ulang |
 

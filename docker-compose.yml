@@ -2,11 +2,25 @@
 #
 #   cp .env.example .env    # lalu ganti JWT_SECRET (minimal 32 karakter)
 #                            # dan INTEGRATION_CREDENTIALS_KEY (openssl rand -base64 32)
+#   ./scripts/mqtt-tls.sh    # CA, sertifikat server, dan password broker
 #   docker compose up -d --build
+#
+# Script TLS harus jalan sebelum `up`: listener 8883/443 butuh sertifikat dan
+# password file, dan compose memount CA ke API. Certificate file yang belum ada
+# akan dibuat Docker sebagai direkt kosong, bukan ditolak.
 #
 # Web  : http://localhost:${WEB_PORT:-3000}
 # API  : http://localhost:${API_PORT:-3001}/api/health
-# MQTT : localhost:1883 (mosquitto)
+# MQTT : mqtts://localhost:8883 · wss://localhost:443  (butuh ./scripts/mqtt-tls.sh)
+#
+# Broker punya tiga listener:
+#   1883  mqtt://  plaintext tanpa auth → hanya jaringan internal compose
+#   8883  mqtts:// TLS + password        → perangkat dan klien di jaringan lokal
+#   443   wss://   TLS + WebSocket       → browser dan klien yang terhalang port
+#                                          non-standar (mis. sandbox browser)
+#
+# API memakai mqtts:// lewat jaringan internal dengan sertifikat CA repo,
+# supaya kredensial broker tidak lagi melewati jaringan dalam plaintext.
 #
 # `migrate` adalah service one-shot: menjalankan `prisma migrate deploy`
 # lalu keluar dengan status 0. API baru start setelah migrasi sukses.
@@ -37,13 +51,20 @@ services:
     container_name: nexahome-mqtt
     restart: unless-stopped
     ports:
-      - "1883:1883"
-      - "9001:9001"
+      # 1883 hanya untuk host, dan hanya di loopback: jangan dipakai dari luar
+      # mesin ini. Klien di jaringan lain memakai 8883.
+      - "127.0.0.1:${MQTT_PLAINTEXT_PORT:-1883}:1883"
+      - "${MQTT_TLS_PORT:-8883}:8883"
+      # Port 443 privileged, jadi publish di sisi host. Di dalam container
+      # mosquitto tetap listen di 8884 supaya tidak butuh root untuk bind.
+      - "${MQTT_WS_PORT:-443}:8884"
     volumes:
       - ./docker/mosquitto/config:/mosquitto/config
+      # DibacaOnly: broker tidak perlu menulis ke direktori sertifikat.
+      - ./docker/mosquitto/certs:/mosquitto/certs:ro
       - mqtt_data:/mosquitto/data
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -t 'nexahome/health' -C 1 -W 3 -q true || exit 0"]
+      test: ["CMD-SHELL", "mosquitto_pub -h 127.0.0.1 -p 1883 -t 'nexahome/health' -m ping -q true || exit 0"]
       interval: 15s
       timeout: 10s
       retries: 3
@@ -90,8 +111,17 @@ services:
       # Broker mosquitto selalu dinyalakan oleh compose ini, jadi adapter MQTT
       # memakai mode nyata. Untuk demo tanpa broker, tambahkan
       # `MQTT_MODE: mock` lewat docker-compose.override.yml.
-      MQTT_URL: ${DOCKER_MQTT_URL:-mqtt://mqtt:1883}
+      MQTT_URL: ${DOCKER_MQTT_URL:-mqtts://mqtt:8883}
       MQTT_MODE: mqtt
+      # Sertifikat broker dibuat oleh scripts/mqtt-tls.sh. CA-nya ikut
+      # di-inject ke image API supaya hostname `mqtt` terbaca sebagai SAN, dan
+      # API memverifikasi sertifikat broker sungguhan — bukan `--insecure`.
+      MQTT_TLS_CA_PATH: /run/nexahome/mqtt-ca.pem
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      # CA sudah di-inject, jadi verifikasi tetap hidup. Set false hanya bila
+      # memakai CA yang tidak sengaja diubah tanpa memberi API CA baru.
+      MQTT_TLS_REJECT_UNAUTHORIZED: "true"
       # Tasmota butuh mDNS ke jaringan LAN, yang sulit dijangkau dari
       # container bridge, jadi default-nya mock (scan kosong).
       TASMOTA_MODE: ${TASMOTA_MODE:-mock}
@@ -102,6 +132,10 @@ services:
       WHISPER_LANG: ${WHISPER_LANG:-id}
     ports:
       - "${API_PORT:-3001}:3001"
+    volumes:
+      # Hanya CA publik. Private key CA dan private key broker tidak pernah
+      # masuk container API.
+      - ./docker/mosquitto/ca/ca.crt:/run/nexahome/mqtt-ca.pem:ro
     depends_on:
       postgres:
         condition: service_healthy
