@@ -1,7 +1,19 @@
 'use client';
 
+import { Radar } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { api, type ApiIntegration, type ApiRoom, type DiscoveredDevice } from '@/lib/api';
+import { deviceMeta } from '@/lib/devices';
 
 interface AddDeviceModalProps {
   homeId: string;
@@ -20,9 +32,7 @@ export default function AddDeviceModal({
   onClose,
   onAdded,
 }: AddDeviceModalProps) {
-  const [integrationId, setIntegrationId] = useState(
-    integrations[0]?.id ?? '',
-  );
+  const [integrationId, setIntegrationId] = useState(integrations[0]?.id ?? '');
   const [scanning, setScanning] = useState(false);
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
   const [connectingId, setConnectingId] = useState<string | null>(null);
@@ -106,54 +116,38 @@ export default function AddDeviceModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <h3 className="font-semibold tracking-tight">Tambah Perangkat</h3>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
-            aria-label="Tutup"
-          >
-            ✕
-          </button>
-        </header>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent onPointerDownOutside={onClose}>
+        <DialogHeader>
+          <DialogTitle>Tambah Perangkat</DialogTitle>
+          <DialogDescription>
+            Pindai jaringan lewat integrasi, atau masukkan perangkat secara manual.
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+        <div className="flex flex-col gap-4">
           {/* Mode toggle */}
-          <div className="flex rounded-lg border border-slate-800 p-1">
-            <button
-              onClick={() => setManual(false)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm transition ${
-                !manual ? 'bg-slate-800 text-white' : 'text-slate-400'
-              }`}
-            >
+          <div
+            aria-label="Cara menambahkan"
+            className="flex rounded-[var(--radius-control)] bg-surface-sunken p-1"
+          >
+            <ModeTab active={!manual} onClick={() => setManual(false)}>
               Otomatis (scan)
-            </button>
-            <button
-              onClick={() => setManual(true)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm transition ${
-                manual ? 'bg-slate-800 text-white' : 'text-slate-400'
-              }`}
-            >
+            </ModeTab>
+            <ModeTab active={manual} onClick={() => setManual(true)}>
               Manual
-            </button>
+            </ModeTab>
           </div>
 
           {/* Integrasi & ruangan */}
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-sm">
-              <span className="mb-1 block text-xs text-slate-400">Integrasi</span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="integration">Integrasi</Label>
               <select
+                id="integration"
                 value={integrationId}
                 onChange={(e) => setIntegrationId(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none"
+                className="h-9.5 w-full rounded-[var(--radius-control)] border border-line bg-surface px-2.5 text-sm text-ink transition-colors hover:border-line-strong focus-visible:border-accent focus-visible:outline-none"
               >
                 {integrations.map((i) => (
                   <option key={i.id} value={i.id}>
@@ -161,13 +155,14 @@ export default function AddDeviceModal({
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-xs text-slate-400">Ruangan</span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="room">Ruangan</Label>
               <select
+                id="room"
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none"
+                className="h-9.5 w-full rounded-[var(--radius-control)] border border-line bg-surface px-2.5 text-sm text-ink transition-colors hover:border-line-strong focus-visible:border-accent focus-visible:outline-none"
               >
                 <option value="">Tanpa ruangan</option>
                 {rooms.map((r) => (
@@ -176,71 +171,66 @@ export default function AddDeviceModal({
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
           </div>
 
           {error && (
-            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            <p
+              role="alert"
+              className="rounded-[var(--radius-control)] bg-critical-soft px-3 py-2 text-sm text-critical"
+            >
               {error}
             </p>
           )}
 
           {!manual ? (
             <>
-              <button
+              <Button
+                variant="primary"
                 onClick={scan}
                 disabled={scanning || !integrationId}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-4 py-2 text-sm font-medium text-white transition hover:from-indigo-500 hover:to-cyan-500 disabled:opacity-50"
+                loading={scanning}
+                loadingText="Memindai…"
               >
-                {scanning ? 'Memindai…' : 'Scan jaringan'}
-              </button>
+                {!scanning && <Radar aria-hidden />}
+                Scan jaringan
+              </Button>
 
               {discovered.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-400">
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-ink-muted">
                     Ditemukan {discovered.length} perangkat:
                   </p>
                   {discovered.map((d) => (
-                    <div
+                    <DiscoveredRow
                       key={d.id}
-                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{d.name}</div>
-                        <div className="truncate text-xs text-slate-500">
-                          {d.id} · <span className="capitalize">{d.type}</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => connect(d)}
-                        disabled={connectingId === d.id}
-                        className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
-                      >
-                        {connectingId === d.id ? '…' : 'Hubungkan'}
-                      </button>
-                    </div>
+                      device={d}
+                      busy={connectingId === d.id}
+                      onConnect={() => connect(d)}
+                    />
                   ))}
                 </div>
               )}
             </>
           ) : (
-            <div className="space-y-3">
-              <label className="block text-sm">
-                <span className="mb-1 block text-xs text-slate-400">Nama</span>
-                <input
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="device-name">Nama</Label>
+                <Input
+                  id="device-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Lampu Teras"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
                 />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm">
-                  <span className="mb-1 block text-xs text-slate-400">Tipe</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="device-type">Tipe</Label>
                   <select
+                    id="device-type"
                     value={type}
                     onChange={(e) => setType(e.target.value)}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none"
+                    className="h-9.5 w-full rounded-[var(--radius-control)] border border-line bg-surface px-2.5 text-sm text-ink transition-colors hover:border-line-strong focus-visible:border-accent focus-visible:outline-none"
                   >
                     {TYPE_OPTIONS.map((t) => (
                       <option key={t} value={t}>
@@ -248,27 +238,79 @@ export default function AddDeviceModal({
                       </option>
                     ))}
                   </select>
-                </label>
-                <label className="block text-sm">
-                  <span className="mb-1 block text-xs text-slate-400">IP / MAC</span>
-                  <input
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="device-external">IP / MAC</Label>
+                  <Input
+                    id="device-external"
                     value={externalId}
                     onChange={(e) => setExternalId(e.target.value)}
                     placeholder="192.168.1.10"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
                   />
-                </label>
+                </div>
               </div>
-              <button
-                onClick={addManual}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-4 py-2 text-sm font-medium text-white transition hover:from-indigo-500 hover:to-cyan-500"
-              >
+              <Button variant="primary" onClick={addManual}>
                 Tambahkan
-              </button>
+              </Button>
             </div>
           )}
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModeTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={[
+        'flex-1 rounded-[calc(var(--radius-control)-0.25rem)] px-3 py-1.5 text-sm',
+        'transition-colors',
+        active
+          ? 'bg-surface font-medium text-ink shadow-[var(--shadow-soft)]'
+          : 'text-ink-muted hover:text-ink',
+      ].join(' ')}
+    >
+      {children}
+    </button>
+  );
+}
+
+function DiscoveredRow({
+  device,
+  busy,
+  onConnect,
+}: {
+  device: DiscoveredDevice;
+  busy: boolean;
+  onConnect: () => void;
+}) {
+  const { icon: Icon, label } = deviceMeta(device.type);
+  return (
+    <div className="flex items-center gap-3 rounded-[var(--radius-control)] border border-line bg-surface px-3 py-2.5">
+      <span className="grid size-8 shrink-0 place-items-center rounded-[var(--radius-control)] bg-surface-sunken text-ink-subtle">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{device.name}</p>
+        <p className="truncate text-xs text-ink-subtle">
+          {device.id} · {label}
+        </p>
       </div>
+      <Button size="sm" variant="outline" onClick={onConnect} loading={busy} loadingText="…">
+        Hubungkan
+      </Button>
     </div>
   );
 }

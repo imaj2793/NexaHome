@@ -1,18 +1,12 @@
 'use client';
 
+import { Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import type { ApiDevice } from '@/lib/api';
-
-const TYPE_ICONS: Record<string, string> = {
-  light: '💡',
-  bulb: '💡',
-  ac: '❄️',
-  tv: '📺',
-  fan: '🌀',
-  sensor: '📡',
-  switch: '🔘',
-  thermostat: '🌡️',
-  plug: '🔌',
-};
+import { cn } from '@/lib/cn';
+import { deviceMeta, deviceStatus } from '@/lib/devices';
 
 interface Rgb {
   r: number;
@@ -20,19 +14,7 @@ interface Rgb {
   b: number;
 }
 
-function rgbToHex(c?: unknown): string {
-  const { r = 255, g = 255, b = 255 } = (c ?? {}) as Partial<Rgb>;
-  const to = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
-  return `#${to(r)}${to(g)}${to(b)}`;
-}
-
-function hexToRgb(hex: string): Rgb {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!m) return { r: 255, g: 255, b: 255 };
-  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
-}
-
-interface DeviceCardProps {
+export interface DeviceCardProps {
   device: ApiDevice;
   busy: boolean;
   onToggle: () => void;
@@ -41,6 +23,34 @@ interface DeviceCardProps {
   onDelete: () => void;
 }
 
+/** Tanpa warna tersimpan, dianggap putih — bukan hitam yang tak terlihat. */
+const DEFAULT_HEX = '#ffffff';
+
+const rgbToHex = (value: unknown): string => {
+  const color = (value ?? {}) as Partial<Rgb>;
+  if (color.r == null && color.g == null && color.b == null) return DEFAULT_HEX;
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+  return `#${[color.r, color.g, color.b]
+    .map((n) => clamp(n ?? 0).toString(16).padStart(2, '0'))
+    .join('')}`;
+};
+
+const hexToRgb = (hex: string): Rgb => {
+  const value = hex.replace('#', '');
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  };
+};
+
+/**
+ * Kartu satu perangkat.
+ *
+ * Susunan disengaja: status (nama + ikon) di kiri, kendali di kanan, dan
+ * kontrol tambahan (brightness/warna) hanya muncul saat perangkat menyala —
+ * supaya grid tetap bisa dibaca kalau banyak perangkat mati.
+ */
 export default function DeviceCard({
   device,
   busy,
@@ -49,99 +59,114 @@ export default function DeviceCard({
   onColor,
   onDelete,
 }: DeviceCardProps) {
-  const state = device.state as {
-    power?: boolean;
-    brightness?: number;
-    color?: Rgb;
-  };
-  const powered = state.power === true;
-  const brightness = typeof state.brightness === 'number' ? state.brightness : 100;
-  const caps = device.capabilities ?? [];
-  const icon = TYPE_ICONS[device.type] ?? '🔌';
-  const showBrightness = caps.includes('brightness');
-  const showColor = caps.includes('color');
+  const { icon: Icon, label: typeLabel } = deviceMeta(device.type);
+  const status = deviceStatus(device);
+  const isOn = status === 'on';
+  const online = device.state?.online !== false;
+
+  const capabilities = device.capabilities ?? [];
+  const brightness = Number(device.state?.brightness ?? 100);
+  const color = rgbToHex(device.state?.color);
 
   return (
-    <div
-      className={`group rounded-2xl border bg-slate-900/60 p-4 transition ${
-        powered ? 'border-indigo-500/40' : 'border-slate-800 hover:border-slate-700'
-      }`}
+    <article
+      data-status={status}
+      className={cn(
+        'group relative flex flex-col gap-3 rounded-[var(--radius-card)] border bg-surface p-4',
+        'transition-[border-color,box-shadow] duration-200',
+        isOn
+          ? 'border-accent/35 shadow-[var(--shadow-soft)]'
+          : 'border-line hover:border-line-strong',
+        !online && 'opacity-70',
+      )}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="text-2xl">{icon}</span>
-          <div className="min-w-0">
-            <div className="truncate font-medium">{device.name}</div>
-            <div className="mt-0.5 truncate text-xs text-slate-400">
-              {device.room ? device.room.name : 'Tanpa ruangan'} ·{' '}
-              <span className="capitalize">{device.type}</span>
-              {device.externalId ? (
-                <span className="text-slate-600"> · {device.externalId}</span>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            onClick={onDelete}
-            title="Hapus perangkat"
-            aria-label="Hapus perangkat"
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-600 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
-          >
-            ✕
-          </button>
-          <button
-            onClick={onToggle}
-            disabled={busy}
-            className={`h-10 w-10 rounded-full text-lg transition disabled:opacity-50 ${
-              powered
-                ? 'bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 shadow-[0_0_16px_rgba(251,191,36,0.35)]'
-                : 'bg-slate-800 text-slate-400'
-            }`}
-            aria-label={powered ? 'Matikan' : 'Nyalakan'}
-          >
-            {icon}
-          </button>
-        </div>
-      </div>
+      <header className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className={cn(
+            'grid size-9 shrink-0 place-items-center rounded-[var(--radius-control)]',
+            'transition-colors duration-200',
+            isOn ? 'bg-accent-soft text-accent' : 'bg-surface-sunken text-ink-subtle',
+          )}
+        >
+          <Icon className="size-[1.125rem]" />
+        </span>
 
-      {powered && (showBrightness || showColor) && (
-        <div className="mt-4 space-y-3">
-          {showBrightness && (
-            <div>
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Kecerahan</span>
-                <span className="tabular-nums text-slate-500">{brightness}%</span>
-              </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold">{device.name}</h3>
+          <p className="mt-0.5 truncate text-xs text-ink-subtle">
+            {[
+              device.room?.name ?? 'Tanpa ruangan',
+              typeLabel,
+              device.externalId,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {online ? (
+            <Badge tone={isOn ? 'positive' : 'neutral'}>
+              {isOn ? 'Menyala' : 'Mati'}
+            </Badge>
+          ) : (
+            <Badge tone="neutral">Offline</Badge>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Hapus ${device.name}`}
+            onClick={onDelete}
+            className="text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <Trash2 aria-hidden />
+          </Button>
+          <Switch
+            checked={isOn}
+            disabled={busy}
+            onCheckedChange={onToggle}
+            aria-label={isOn ? `Matikan ${device.name}` : `Nyalakan ${device.name}`}
+          />
+        </div>
+      </header>
+
+      {/* Kontrol tambahan hanya saat perangkat menyala: kecerahan/warna pada
+          lampu yang mati tidak berarti, dan mengubahnya akan sia-sia. */}
+      {isOn && (capabilities.includes('brightness') || capabilities.includes('color')) && (
+        <div className="flex flex-col gap-3 border-t border-line pt-3">
+          {capabilities.includes('brightness') && (
+            <label className="flex items-center gap-3">
+              <span className="w-16 shrink-0 text-xs text-ink-muted">Kecerahan</span>
               <input
                 type="range"
-                min={1}
+                min={0}
                 max={100}
                 value={brightness}
+                aria-label={`Kecerahan ${device.name}`}
                 onChange={(e) => onBrightness(Number(e.target.value))}
-                className="mt-1 w-full accent-indigo-500"
-                aria-label="Kecerahan"
+                className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-surface-sunken accent-accent"
               />
-            </div>
+              <span className="w-10 shrink-0 text-right text-xs text-ink-muted tabular-nums">
+                {brightness}%
+              </span>
+            </label>
           )}
-          {showColor && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400">Warna</span>
+
+          {capabilities.includes('color') && (
+            <label className="flex items-center gap-3">
+              <span className="w-16 shrink-0 text-xs text-ink-muted">Warna</span>
               <input
                 type="color"
-                value={rgbToHex(state.color)}
+                value={color}
+                aria-label={`Warna ${device.name}`}
                 onChange={(e) => onColor(hexToRgb(e.target.value))}
-                className="h-7 w-9 cursor-pointer rounded border border-slate-700 bg-transparent p-0.5"
-                aria-label="Warna"
+                className="h-7 w-full cursor-pointer rounded-md border border-line bg-surface p-0.5"
               />
-            </div>
+            </label>
           )}
         </div>
       )}
-
-      <div className="mt-3 text-xs text-slate-500">
-        {powered ? 'Menyala' : 'Mati'}
-      </div>
-    </div>
+    </article>
   );
 }

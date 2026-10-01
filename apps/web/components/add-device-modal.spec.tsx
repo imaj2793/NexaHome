@@ -89,16 +89,26 @@ describe('AddDeviceModal', () => {
     });
 
     it('closes when the backdrop is clicked', async () => {
-      const { user, onClose, container } = setup();
-      await user.click(container.firstElementChild as HTMLElement);
-      expect(onClose).toHaveBeenCalledTimes(1);
+      const { user, onClose } = setup();
+      const overlay = document.querySelector(
+        '[data-radix-dialog-overlay], [data-state]',
+      ) as HTMLElement | null;
+      expect(overlay).not.toBeNull();
+      await user.click(overlay as HTMLElement);
+      expect(onClose).toHaveBeenCalled();
     });
 
     it('does not close when the modal body is clicked', async () => {
-      const { user, onClose, container } = setup();
-      const panel = container.firstElementChild?.firstElementChild as HTMLElement;
+      const { user, onClose } = setup();
+      const panel = screen.getByRole('dialog');
       await user.click(panel);
       expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('closes on Escape', async () => {
+      const { user, onClose } = setup();
+      await user.keyboard('{Escape}');
+      expect(onClose).toHaveBeenCalled();
     });
   });
 
@@ -135,9 +145,9 @@ describe('AddDeviceModal', () => {
       await user.click(screen.getByRole('button', { name: 'Scan jaringan' }));
       expect(screen.getByText('Ditemukan 2 perangkat:')).toBeInTheDocument();
       expect(screen.getByText('Lampu Depan')).toBeInTheDocument();
-      expect(screen.getByText('shelly-1 ·')).toBeInTheDocument();
+      expect(screen.getByText('shelly-1 · Lampu')).toBeInTheDocument();
       expect(screen.getByText('Saklar Samping')).toBeInTheDocument();
-      expect(screen.getByText('shelly-2 ·')).toBeInTheDocument();
+      expect(screen.getByText('shelly-2 · Saklar')).toBeInTheDocument();
       expect(screen.getAllByRole('button', { name: 'Hubungkan' })).toHaveLength(2);
     });
 

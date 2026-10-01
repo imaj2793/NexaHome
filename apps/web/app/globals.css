@@ -1,12 +1,102 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
+/*
+ * Token desain NexaHome.
+ *
+ * Light-first: permukaan terang, aksen satu warna (teal), dan hierarki lewat
+ * border tipis + bayangan sangat lembut — bukan glow/neon. Semua warna yang
+ * dipakai komponen didefinisikan sekali di sini lewat `@theme`, jadi mengganti
+ * identitas warna cukup mengedit blok ini, bukan mencari class hex di mana-mana.
+ */
+@theme {
+  /* Netral — dari permukaan halaman sampai teks utama. */
+  --color-canvas: oklch(98.4% 0.004 250);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-muted: oklch(97% 0.005 250);
+  --color-surface-sunken: oklch(95.5% 0.007 250);
+
+  --color-line: oklch(91.5% 0.008 250);
+  --color-line-strong: oklch(86% 0.01 250);
+
+  --color-ink: oklch(24% 0.02 255);
+  --color-ink-muted: oklch(50% 0.016 255);
+  --color-ink-subtle: oklch(63% 0.014 255);
+
+  /* Teks di atas latar gelap (panggung robot). */
+  --color-ink-inverse: oklch(100% 0 0);
+  --color-ink-inverse-muted: oklch(82% 0.012 255);
+  --color-ink-inverse-subtle: oklch(66% 0.014 255);
+
+  /* Aksen: satu warna untuk aksi utama dan status aktif. */
+  --color-accent: oklch(58% 0.1 195);
+  --color-accent-hover: oklch(52% 0.1 195);
+  --color-accent-soft: oklch(95% 0.03 195);
+  --color-accent-ink: oklch(100% 0 0);
+
+  /* Status. */
+  --color-positive: oklch(62% 0.13 155);
+  --color-positive-soft: oklch(95% 0.05 155);
+  --color-caution: oklch(72% 0.14 75);
+  --color-caution-soft: oklch(96% 0.06 85);
+  --color-critical: oklch(58% 0.19 25);
+  --color-critical-soft: oklch(96% 0.04 25);
+
+  /* Radius dan bayangan: tipis, tidak dramatis. */
+  --radius-card: 0.875rem;
+  --radius-control: 0.625rem;
+  --shadow-soft: 0 1px 2px oklch(24% 0.02 255 / 0.05);
+  --shadow-lift: 0 6px 20px -8px oklch(24% 0.02 255 / 0.14);
+
+  /* Tipografi. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --animate-fade-up: fade-up 0.28s ease-out both;
+  --animate-fade-in: fade-in 0.16s ease-out both;
+  --animate-scale-in: scale-in 0.18s ease-out both;
 }
 
-body {
-  background: #0b1120;
-  color: #e2e8f0;
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Fokus keyboard harus selalu terlihat: outline bawaan terlalu tipis di
+     latar terang dan sering hilang karena styling manual. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
 }
 
 /* ── Nexa robot animations (per ekspresi) ──────────────── */

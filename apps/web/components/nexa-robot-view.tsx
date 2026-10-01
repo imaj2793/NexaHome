@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useEffect } from 'react';
 import type { NexaState } from '@/lib/nexa';
 import NexaRobot from './nexa-robot';
@@ -10,9 +11,11 @@ interface NexaRobotViewProps {
 }
 
 /**
- * Tampilan robot full-screen. Overlay modal yang menampilkan ekspresi Nexa
- * dalam ukuran besar + label + pesan. Menerima state sebagai prop sehingga tetap
- * live mengikuti event `nexa.state` dari parent.
+ * Tampilan robot full-screen.
+ *
+ * Latarnya gelap dengan sengaja — sama seperti panggung robot di panel Nexa:
+ * mata dan glow dirancang untuk latar gelap, dan layar penuh ini adalah
+ * momen "berbicara dengan Nexa", bukan panel pengaturan.
  */
 export default function NexaRobotView({ state, onClose }: NexaRobotViewProps) {
   // Tutup dengan Escape + kunci scroll body.
@@ -29,24 +32,25 @@ export default function NexaRobotView({ state, onClose }: NexaRobotViewProps) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-md">
-      {/* glow latar */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.15),transparent_60%)]" />
-
+    <div
+      role="dialog"
+      aria-label="Nexa"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-ink/95 backdrop-blur-md"
+    >
       <button
         onClick={onClose}
-        className="absolute right-6 top-6 flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 text-lg text-slate-300 transition hover:bg-slate-800 hover:text-white"
+        className="absolute top-6 right-6 grid size-10 place-items-center rounded-full border border-white/15 text-ink-inverse-muted transition hover:bg-white/10 hover:text-ink-inverse"
         aria-label="Tutup"
       >
-        ✕
+        <X className="size-4" aria-hidden />
       </button>
 
       <div className="relative z-10">
         <NexaRobot state={state} size="xl" />
       </div>
 
-      <p className="absolute bottom-8 text-sm text-slate-500">
-        Tekan <span className="text-slate-300">Esc</span> atau ✕ untuk kembali.
+      <p className="absolute bottom-8 text-sm text-ink-inverse-subtle">
+        Tekan <span className="text-ink-inverse-muted">Esc</span> untuk kembali.
       </p>
     </div>
   );

@@ -1,6 +1,13 @@
 'use client';
 
+import { Maximize2, Mic, Send, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import NexaRobot from '@/components/nexa-robot';
+import NexaRobotView from '@/components/nexa-robot-view';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/cn';
 import {
   fetchNexaStatus,
   sendNexaMessage,
@@ -11,8 +18,6 @@ import {
   type NexaState,
 } from '@/lib/nexa';
 import { connectSocket, joinHome } from '@/lib/socket';
-import NexaRobot from '@/components/nexa-robot';
-import NexaRobotView from '@/components/nexa-robot-view';
 
 interface ChatMessage {
   id: number;
@@ -28,9 +33,28 @@ interface NexaStateEvent {
 
 let nextId = 0;
 
-export default function NexaChat({ homeId }: { homeId: string }) {
+/** Label status untuk pengguna; kode state internal tidak diubah. */
+const STATE_LABEL: Record<NexaState, string> = {
+  IDLE: 'Siap',
+  LISTENING: 'Mendengarkan',
+  THINKING: 'Berpikir',
+  PROCESSING: 'Memproses',
+  SUCCESS: 'Selesai',
+  ERROR: 'Gagal',
+  READY: 'Siaga',
+  SLEEPING: 'Tidur',
+};
+
+export default function NexaChat({
+  homeId,
+  onNexaState,
+}: {
+  homeId: string;
+  /** Naikkan state Nexa ke halaman agar sidebar bisa menampilkan status sama. */
+  onNexaState?: (state: NexaState) => void;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: nextId++, role: 'nexa', text: 'Halo! Aku Nexa 🤖 Ada yang bisa kubantu?' },
+    { id: nextId++, role: 'nexa', text: 'Halo! Aku Nexa. Ada yang bisa kubantu?' },
   ]);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
@@ -43,11 +67,17 @@ export default function NexaChat({ homeId }: { homeId: string }) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
+  const current = status ?? 'IDLE';
+
   // Scroll ke bawah setiap kali daftar pesan berubah.
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, pending, status]);
+
+  useEffect(() => {
+    onNexaState?.(current);
+  }, [current, onNexaState]);
 
   // Status live via WebSocket (state + pesan → robot visual).
   // Server hanya mengirim ke room home yang sudah di-join.
@@ -81,7 +111,7 @@ export default function NexaChat({ homeId }: { homeId: string }) {
       if (notes.length === 0) return;
       setMessages((prev) => [
         ...prev,
-        { id: nextId++, role: 'nexa', text: `ℹ️ Saat ini ${notes.join(' dan ')}.` },
+        { id: nextId++, role: 'nexa', text: `Saat ini ${notes.join(' dan ')}.` },
       ]);
     });
     return () => {
@@ -110,7 +140,7 @@ export default function NexaChat({ homeId }: { homeId: string }) {
         err instanceof Error ? err.message : 'Gagal menghubungi Nexa.';
       setMessages((prev) => [
         ...prev,
-        { id: nextId++, role: 'error', text: `⚠️ ${message}` },
+        { id: nextId++, role: 'error', text: message },
       ]);
       setStatus('ERROR');
     } finally {
@@ -147,7 +177,7 @@ export default function NexaChat({ homeId }: { homeId: string }) {
         {
           id: nextId++,
           role: 'error',
-          text: '⚠️ Mikrofon tidak tersedia atau izin ditolak.',
+          text: 'Mikrofon tidak tersedia atau izin ditolak.',
         },
       ]);
     }
@@ -201,7 +231,7 @@ export default function NexaChat({ homeId }: { homeId: string }) {
         err instanceof Error ? err.message : 'Gagal memproses suara.';
       setMessages((prev) => [
         ...prev,
-        { id: nextId++, role: 'error', text: `⚠️ ${message}` },
+        { id: nextId++, role: 'error', text: message },
       ]);
       setStatus('IDLE');
     } finally {
@@ -209,49 +239,61 @@ export default function NexaChat({ homeId }: { homeId: string }) {
     }
   }
 
+  const micDisabled = pending || caps?.stt.configured === false;
+  const micTitle =
+    caps?.stt.configured === false
+      ? 'Perintah suara belum aktif — isi WHISPER_MODEL di server'
+      : recording
+        ? 'Berhenti merekam'
+        : 'Mulai bicara — ucapkan "Hi Nexa"';
+
   return (
-    <section className="flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-900/60">
-      <header className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
-        <span className="font-semibold tracking-tight">Nexa</span>
-        <button
+    <section className="flex h-full flex-col bg-surface">
+      <header className="flex items-center gap-2 border-b border-line px-4 py-3">
+        <span className="text-sm font-semibold tracking-tight">Nexa</span>
+        <Badge tone={current === 'ERROR' ? 'critical' : 'neutral'}>
+          {STATE_LABEL[current]}
+        </Badge>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={() => setFullscreen(true)}
           title="Lihat robot layar penuh"
           aria-label="Lihat robot layar penuh"
-          className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300"
+          className="ml-auto text-ink-subtle"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-          </svg>
-        </button>
+          <Maximize2 aria-hidden />
+        </Button>
       </header>
 
-      {/* Robot visual — dipisah dari AI Core (blueprint §40) */}
-      <div className="border-b border-slate-800 bg-slate-950/40 px-4 py-5">
-        <NexaRobot state={status ?? 'IDLE'} />
+      {/* Robot visual — dipisah dari AI Core (blueprint §40).
+          Panggungnya gelap dengan sengaja: mata dan glow Nexa dirancang untuk
+          latar gelap, jadi di UI terang ia menjadi titik fokus. */}
+      <div className="border-b border-line bg-ink px-4 py-4">
+        <NexaRobot state={current} />
       </div>
 
       <div
         ref={listRef}
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+        className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4"
       >
         {messages.map((m) => (
           <div
             key={m.id}
-            className={`flex ${
-              m.role === 'user' ? 'justify-end' : 'justify-start'
-            }`}
-          >
-            {m.role !== 'user' && (
-              <span className="mr-2 mt-1 text-lg leading-none">🤖</span>
+            className={cn(
+              'flex',
+              m.role === 'user' ? 'justify-end' : 'justify-start',
             )}
+          >
             <div
-              className={`max-w-[75%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm ${
-                m.role === 'user'
-                  ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white'
-                  : m.role === 'error'
-                    ? 'border border-red-500/30 bg-red-500/10 text-red-300'
-                    : 'border border-slate-700 bg-slate-800 text-slate-200'
-              }`}
+              className={cn(
+                'max-w-[85%] rounded-[var(--radius-card)] px-3.5 py-2 text-sm',
+                'whitespace-pre-wrap',
+                m.role === 'user' && 'bg-accent text-white',
+                m.role === 'nexa' && 'border border-line bg-surface-muted text-ink',
+                m.role === 'error' &&
+                  'border border-critical/30 bg-critical-soft text-critical',
+              )}
             >
               {m.text}
             </div>
@@ -260,8 +302,7 @@ export default function NexaChat({ homeId }: { homeId: string }) {
 
         {pending && (
           <div className="flex justify-start">
-            <span className="mr-2 mt-1 text-lg leading-none">🤖</span>
-            <div className="rounded-2xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-sm text-slate-400">
+            <div className="rounded-[var(--radius-card)] border border-line bg-surface-muted px-3.5 py-2 text-sm text-ink-subtle">
               Memikirkan…
             </div>
           </div>
@@ -273,48 +314,33 @@ export default function NexaChat({ homeId }: { homeId: string }) {
           e.preventDefault();
           handleSend();
         }}
-        className="flex items-center gap-2 border-t border-slate-800 p-3"
+        className="flex items-center gap-2 border-t border-line p-3"
       >
-        <input
+        <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Tanya Nexa…"
-          className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+          aria-label="Tanya Nexa"
         />
-        <button
+        <Button
           type="button"
+          variant={recording ? 'primary' : 'outline'}
+          size="icon"
+          disabled={micDisabled}
           onClick={recording ? stopRecording : startRecording}
-          disabled={pending || caps?.stt.configured === false}
-          title={
-            caps?.stt.configured === false
-              ? 'Perintah suara belum aktif — isi WHISPER_MODEL di server'
-              : recording
-                ? 'Berhenti merekam'
-                : 'Mulai bicara — ucapkan "Hi Nexa"'
-          }
+          title={micTitle}
           aria-label={recording ? 'Berhenti merekam' : 'Mulai bicara'}
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-base transition disabled:opacity-50 ${
-            recording
-              ? 'animate-pulse border-red-500 bg-red-500/20 text-red-300'
-              : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-500/50 hover:text-cyan-300'
-          }`}
         >
-          {recording ? '■' : '🎤'}
-        </button>
-        <button
-          type="submit"
-          disabled={pending || !input.trim()}
-          className="rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-4 py-2 text-sm font-medium text-white transition hover:from-indigo-500 hover:to-cyan-500 disabled:opacity-50"
-        >
-          Kirim
-        </button>
+          {recording ? <Square aria-hidden /> : <Mic aria-hidden />}
+        </Button>
+        <Button type="submit" variant="primary" disabled={pending || !input.trim()}>
+          <Send aria-hidden />
+          <span className="sr-only sm:not-sr-only">Kirim</span>
+        </Button>
       </form>
 
       {fullscreen && (
-        <NexaRobotView
-          state={status ?? 'IDLE'}
-          onClose={() => setFullscreen(false)}
-        />
+        <NexaRobotView state={current} onClose={() => setFullscreen(false)} />
       )}
     </section>
   );

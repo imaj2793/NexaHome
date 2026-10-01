@@ -41,17 +41,21 @@ function setup(device: ApiDevice, busy = false) {
   return { user, onToggle, onBrightness, onColor, onDelete };
 }
 
+/** Saklar daya; namanya sudah termasuk nama perangkat. */
+function powerSwitch(): HTMLElement {
+  return screen.getByRole('switch', { name: /^(Nyalakan|Matikan)/ });
+}
+
 afterEach(cleanup);
 
 describe('DeviceCard', () => {
   describe('identity', () => {
     it('renders name, room, type and externalId', () => {
       setup(makeDevice({ externalId: '192.168.1.10' }));
-      expect(screen.getByText('Lampu Teras')).toBeInTheDocument();
-      const meta = document.querySelector('.mt-0\\.5') as HTMLElement;
-      expect(meta.textContent).toContain('Teras');
-      expect(meta.textContent).toContain('light');
-      expect(meta.textContent).toContain('192.168.1.10');
+      expect(screen.getByRole('heading', { name: 'Lampu Teras' })).toBeInTheDocument();
+      expect(
+        screen.getByText('Teras · Lampu · 192.168.1.10'),
+      ).toBeInTheDocument();
     });
 
     it('falls back to "Tanpa ruangan" when there is no room', () => {
@@ -73,16 +77,23 @@ describe('DeviceCard', () => {
       expect(container.textContent).not.toContain('null');
     });
 
-    it('maps known types to icons and unknown types to a plug', () => {
-      const { unmount } = render(
+    it('maps known types to an icon and unknown types to a plug', () => {
+      const known = render(
         <DeviceCard device={makeDevice({ type: 'light' })} busy={false} onToggle={noop} onBrightness={noop} onColor={noop} onDelete={noop} />,
       );
-      expect(screen.getAllByText('💡')).toHaveLength(2); // badge + toggle button
-      unmount();
-      render(
+      expect(known.container.querySelector('.lucide-lightbulb')).not.toBeNull();
+      known.unmount();
+
+      const thermostat = render(
         <DeviceCard device={makeDevice({ type: 'thermostat' })} busy={false} onToggle={noop} onBrightness={noop} onColor={noop} onDelete={noop} />,
       );
-      expect(screen.getAllByText('🌡️')).toHaveLength(2);
+      expect(thermostat.container.querySelector('.lucide-thermometer')).not.toBeNull();
+
+      const unknown = render(
+        <DeviceCard device={makeDevice({ type: 'menang' })} busy={false} onToggle={noop} onBrightness={noop} onColor={noop} onDelete={noop} />,
+      );
+      expect(unknown.container.querySelector('.lucide-plug')).not.toBeNull();
+      expect(unknown.container.textContent).toContain('Perangkat');
     });
   });
 
@@ -90,31 +101,45 @@ describe('DeviceCard', () => {
     it('shows "Mati" and a "Nyalakan" action when off', () => {
       setup(makeDevice({ state: { power: false } }));
       expect(screen.getByText('Mati')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Nyalakan' })).toBeEnabled();
+      expect(powerSwitch()).toHaveAccessibleName(/Nyalakan Lampu Teras/);
+      expect(powerSwitch()).toBeEnabled();
     });
 
     it('shows "Menyala" and a "Matikan" action when on', () => {
       setup(makeDevice({ state: { power: true } }));
       expect(screen.getByText('Menyala')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Matikan' })).toBeEnabled();
+      expect(powerSwitch()).toHaveAccessibleName(/Matikan Lampu Teras/);
+      expect(powerSwitch()).toBeEnabled();
     });
 
     it('treats a missing power flag as off', () => {
       setup(makeDevice({ state: {} }));
       expect(screen.getByText('Mati')).toBeInTheDocument();
     });
+
+    it('marks the card with its status', () => {
+      const { container } = render(
+        <DeviceCard device={makeDevice({ state: { power: true } })} busy={false} onToggle={noop} onBrightness={noop} onColor={noop} onDelete={noop} />,
+      );
+      expect(container.querySelector('article')).toHaveAttribute('data-status', 'on');
+    });
+
+    it('flags an offline device instead of claiming a power state', () => {
+      setup(makeDevice({ state: { online: false, power: true } }));
+      expect(screen.getByText('Offline')).toBeInTheDocument();
+    });
   });
 
   describe('toggle callback', () => {
-    it('fires onToggle once from the power button', async () => {
+    it('fires onToggle once from the power switch', async () => {
       const { user, onToggle } = setup(makeDevice());
-      await user.click(screen.getByRole('button', { name: 'Nyalakan' }));
+      await user.click(powerSwitch());
       expect(onToggle).toHaveBeenCalledTimes(1);
     });
 
     it('fires onToggle when turning off too', async () => {
       const { user, onToggle } = setup(makeDevice({ state: { power: true } }));
-      await user.click(screen.getByRole('button', { name: 'Matikan' }));
+      await user.click(powerSwitch());
       expect(onToggle).toHaveBeenCalledTimes(1);
     });
   });
@@ -122,25 +147,27 @@ describe('DeviceCard', () => {
   describe('busy / disabled', () => {
     it('disables the toggle while busy', () => {
       setup(makeDevice(), true);
-      expect(screen.getByRole('button', { name: 'Nyalakan' })).toBeDisabled();
+      expect(powerSwitch()).toBeDisabled();
     });
 
     it('does not fire onToggle when clicked while busy', async () => {
       const { user, onToggle } = setup(makeDevice(), true);
-      await user.click(screen.getByRole('button', { name: 'Nyalakan' }));
+      await user.click(powerSwitch());
       expect(onToggle).not.toHaveBeenCalled();
     });
 
     it('keeps the delete button enabled while busy', () => {
       setup(makeDevice(), true);
-      expect(screen.getByRole('button', { name: 'Hapus perangkat' })).toBeEnabled();
+      expect(
+        screen.getByRole('button', { name: /Hapus Lampu Teras/ }),
+      ).toBeEnabled();
     });
   });
 
   describe('delete', () => {
-    it('fires onDelete from the ✕ button', async () => {
+    it('fires onDelete from the delete button', async () => {
       const { user, onDelete } = setup(makeDevice());
-      await user.click(screen.getByRole('button', { name: 'Hapus perangkat' }));
+      await user.click(screen.getByRole('button', { name: /Hapus Lampu Teras/ }));
       expect(onDelete).toHaveBeenCalledTimes(1);
     });
   });
@@ -153,14 +180,14 @@ describe('DeviceCard', () => {
           capabilities: ['power', 'brightness', 'color'],
         }),
       );
-      expect(screen.queryByRole('slider', { name: 'Kecerahan' })).toBeNull();
-      expect(screen.queryByLabelText('Warna')).toBeNull();
+      expect(screen.queryByRole('slider', { name: /Kecerahan/ })).toBeNull();
+      expect(screen.queryByLabelText(/Warna/)).toBeNull();
     });
 
     it('hides controls for a plain on/off device', () => {
       setup(makeDevice({ state: { power: true }, capabilities: ['power'] }));
-      expect(screen.queryByRole('slider', { name: 'Kecerahan' })).toBeNull();
-      expect(screen.queryByLabelText('Warna')).toBeNull();
+      expect(screen.queryByRole('slider', { name: /Kecerahan/ })).toBeNull();
+      expect(screen.queryByLabelText(/Warna/)).toBeNull();
     });
   });
 
@@ -170,7 +197,7 @@ describe('DeviceCard', () => {
         makeDevice({ state: { power: true, brightness: 42 }, capabilities: ['brightness'] }),
       );
       expect(screen.getByText('42%')).toBeInTheDocument();
-      expect(screen.getByRole('slider', { name: 'Kecerahan' })).toHaveValue('42');
+      expect(screen.getByRole('slider', { name: /Kecerahan/ })).toHaveValue('42');
     });
 
     it('defaults to 100% when brightness is absent', () => {
@@ -182,7 +209,7 @@ describe('DeviceCard', () => {
       const { onBrightness } = setup(
         makeDevice({ state: { power: true, brightness: 50 }, capabilities: ['brightness'] }),
       );
-      const slider = screen.getByRole('slider', { name: 'Kecerahan' });
+      const slider = screen.getByRole('slider', { name: /Kecerahan/ });
       fireEvent.change(slider, { target: { value: '70' } });
       expect(onBrightness).toHaveBeenCalledWith(70);
     });
@@ -191,7 +218,7 @@ describe('DeviceCard', () => {
   describe('color', () => {
     it('defaults to white when no color in state', () => {
       setup(makeDevice({ state: { power: true }, capabilities: ['color'] }));
-      expect(screen.getByLabelText('Warna')).toHaveValue('#ffffff');
+      expect(screen.getByLabelText(/Warna/)).toHaveValue('#ffffff');
     });
 
     it('renders the stored rgb as a hex value', () => {
@@ -201,7 +228,7 @@ describe('DeviceCard', () => {
           capabilities: ['color'],
         }),
       );
-      expect(screen.getByLabelText('Warna')).toHaveValue('#123456');
+      expect(screen.getByLabelText(/Warna/)).toHaveValue('#123456');
     });
 
     it('clamps out-of-range channels', () => {
@@ -211,14 +238,14 @@ describe('DeviceCard', () => {
           capabilities: ['color'],
         }),
       );
-      expect(screen.getByLabelText('Warna')).toHaveValue('#ff0000');
+      expect(screen.getByLabelText(/Warna/)).toHaveValue('#ff0000');
     });
 
     it('reports the picked colour as an rgb payload', () => {
       const { onColor } = setup(
         makeDevice({ state: { power: true }, capabilities: ['color'] }),
       );
-      fireEvent.change(screen.getByLabelText('Warna'), { target: { value: '#0a141e' } });
+      fireEvent.change(screen.getByLabelText(/Warna/), { target: { value: '#0a141e' } });
       expect(onColor).toHaveBeenCalledWith({ r: 10, g: 20, b: 30 });
     });
   });
