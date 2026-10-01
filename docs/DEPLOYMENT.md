@@ -86,24 +86,46 @@ Script itu membuat tiga hal:
 
 | File | Isi | Dipakai siapa |
 | --- | --- | --- |
-| `docker/mosquitto/ca/ca.{crt,key}` | CA lokal 10 tahun | perangkat & API (CA publik saja) |
+| `docker/mosquitto/config/ca.crt` | CA lokal 10 tahun | perangkat, broker (healthcheck), API |
+| `docker/mosquitto/ca/ca.key` | private key CA | tidak pernah masuk container mana pun |
 | `docker/mosquitto/certs/server.{crt,key}` | sertifikat server + chain | broker |
 | `docker/mosquitto/config/passwd` | password hash | broker |
 
 Semua file itu diabaikan Git. `MQTT_USERNAME` dan `MQTT_PASSWORD` dibangkitkan
-script dan ditulis ke `.env`; compose meneruskannya ke broker dan API.
+script dan ditulis ke `.env`; compose meneruskannya ke broker dan API. Compose
+menolak start kalau `MQTT_PASSWORD` kosong, dengan pesan yang menyebut script
+ini — bukan membiarkan listener TLS menolak semua koneksi dengan
+`not authorised`.
+
+CA publik diletakkan di `docker/mosquitto/config/` karena direktori itu sudah
+di-mount ke broker dan API, sedangkan private key CA tetap di `docker/mosquitto/ca/`
+yang tidak pernah di-mount.
 
 CA dan sertifikat server sengaja dipisah: sertifikat self-signed tidak bisa
 menjadi trust anchor dirinya sendiri, jadi perangkat akan menolaknya meski
 sertifikatnya sudah dipasang sebagai CA. Dengan pemisahan itu, perangkat cukup
-memasang `docker/mosquitto/ca/ca.crt` dan sertifikat server bisa diganti
+memasang `docker/mosquitto/config/ca.crt` dan sertifikat server bisa diganti
 sepanjang masa pakai CA.
 
 Verifikasi:
 
 ```bash
-openssl s_client -connect localhost:8883 -CAfile docker/mosquitto/ca/ca.crt
+./scripts/mqtt-tls.sh --check        # audit file, masa berlaku, chain, SAN, password
+openssl s_client -connect localhost:8883 -CAfile docker/mosquitto/config/ca.crt
 ```
+
+`--check` tidak mengubah apa pun dan keluar dengan kode selain 0 kalau ada yang
+bermasalah, jadi cocok untuk cronjob yang mengirim alarm sebelum sertifikat
+kedaluwarsa:
+
+```bash
+17 8 * * * cd /opt/nexahome && ./scripts/mqtt-tls.sh --check | mail -s "MQTT TLS" admin@example.com
+```
+
+Healthcheck broker tidak sekadar bukti "port terbuka": ia publish ke 1883
+(loopback) lalu ke 8883 memakai CA dan password dari env. Kalau sertifikat
+rusak, kedaluwarsa, atau password tidak cocok, container jadi `unhealthy` dan
+`api` yang bergantung pada kondisi sehat ikut tertahan.
 
 Untuk hostnames di luar `localhost`, `mosquitto`, dan `mqtt`, tambahkan saat
 membuat sertifikat:
@@ -114,7 +136,22 @@ membuat sertifikat:
 
 Untuk produksi, ganti CA lokal dengan CA publik (mis. Let's Encrypt) dan arahkan
 `certfile`/`keyfile` di `docker/mosquitto/config/mosquitto.conf` ke sertifikat
-itu. Private key CA lokal tidak pernah masuk container broker maupun API.
+itu. Private key CA lokal tidak pernah masuk container broker maupun API. Kalau
+CA-nya ikut berubah, taruh CA publik itu di `docker/mosquitto/config/ca.crt`
+atau set `MQTT_CA_FILE` ke lokasi lain yang sudah di-mount ke broker — healthcheck
+memakai file itu untuk memeriksa chain.
+
+Kedua listener TLS mengaktifkan `tls_version tlsv1.2`, jadi TLS 1.0 dan 1.1
+ditolak dengan alert `protocol_version` tanpa tergantung default versi Mosquitto
+yang dipakai. TLS 1.2 dan 1.3 tetap diterima — `tlsv1.2` adalah batas bawah,
+bukan batas atas:
+
+```bash
+# ditolak: alert protocol version, Cipher 0000
+echo | openssl s_client -connect localhost:8883 -tls1 -CAfile docker/mosquitto/config/ca.crt
+# diterima
+echo | openssl s_client -connect localhost:8883 -tls1_2 -CAfile docker/mosquitto/config/ca.crt
+```
 
 ---
 
@@ -326,7 +363,7 @@ Baca `CHANGELOG.md` untuk daftar perubahan antar versi.
 | Log `Integrasi MQTT gagal connect` | Broker belum siap atau URL salah. API tetap jalan; cek `docker compose logs mqtt` |
 | Log broker `cannot load certificate file` / `unable to load password file` | `./scripts/mqtt-tls.sh` belum dijalankan, atau cert/passwd terhapus. Jalankan script lalu `docker compose restart mqtt` |
 | MQTT `not authorised` di log broker | Username/password tidak cocok dengan password file. `MQTT_PASSWORD` di `.env` harus sama dengan yang dipakai script; kalau berganti, jalankan `./scripts/mqtt-tls.sh --force` |
-| `self-signed certificate in certificate chain` dari API/perangkat | CA belum dipercaya. Tambahkan `docker/mosquitto/ca/ca.crt` ke perangkat, atau set `MQTT_TLS_CA_PATH` ke CA yang benar |
+| `self-signed certificate in certificate chain` dari API/perangkat | CA belum dipercaya. Pasang `docker/mosquitto/config/ca.crt` di perangkat, atau set `MQTT_TLS_CA_PATH` ke CA yang benar |
 | `CORS` diblokir browser | `CORS_ORIGIN` tidak memuat origin dashboard (tanpa garis slash di akhir) |
 | Image build gagal di `prisma generate` | Cache Docker rusak: `docker builder prune -a` lalu build ulang |
 

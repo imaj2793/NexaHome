@@ -58,13 +58,37 @@ services:
       # Port 443 privileged, jadi publish di sisi host. Di dalam container
       # mosquitto tetap listen di 8884 supaya tidak butuh root untuk bind.
       - "${MQTT_WS_PORT:-443}:8884"
+    environment:
+      # Hanya untuk healthcheck: membuktikan listener TLS benar-benar menerima
+      # password, bukan cuma bisa di-bind. Broker sendiri membaca user dari
+      # /mosquitto/config/passwd.
+      MQTT_USERNAME: ${MQTT_USERNAME:?MQTT_USERNAME wajib diisi — jalankan ./scripts/mqtt-tls.sh lebih dulu.}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?MQTT_PASSWORD wajib diisi — jalankan ./scripts/mqtt-tls.sh lebih dulu.}
+      # CA untuk healthcheck. Broker sendiri tidak memverifikasi chain-nya;
+      # file ini dipakai mosquitto_pub agar pemeriksaan di bawah benar-benar
+      # menguji chain, bukan cuma membuca listener.
+      MQTT_CA_FILE: ${MQTT_CA_FILE:-/mosquitto/config/ca.crt}
     volumes:
       - ./docker/mosquitto/config:/mosquitto/config
       # DibacaOnly: broker tidak perlu menulis ke direktori sertifikat.
       - ./docker/mosquitto/certs:/mosquitto/certs:ro
       - mqtt_data:/mosquitto/data
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_pub -h 127.0.0.1 -p 1883 -t 'nexahome/health' -m ping -q true || exit 0"]
+      # Dua-duanya wajib lolos. `|| exit 0` yang dulu ada membuat healthcheck
+      # selalu hijau sehingga tidak pernah menangkap apa pun.
+      #
+      # Publish ke 1883 membuktikan proses broker hidup. Publish ke 8883 dengan
+      # CA dan password membuktikan listener TLS memuat sertifikat yang masih
+      # berlaku dan menerima autentikasi -- tiga hal yang tidak terlihat dari
+      # port yang sekadar terbuka.
+      test:
+        - CMD-SHELL
+        - >-
+          mosquitto_pub -h 127.0.0.1 -p 1883 -t 'nexahome/health' -m ping
+          && mosquitto_pub -h 127.0.0.1 -p 8883
+          --cafile "$$MQTT_CA_FILE"
+          -u "$$MQTT_USERNAME" -P "$$MQTT_PASSWORD"
+          -t 'nexahome/health' -m ping
       interval: 15s
       timeout: 10s
       retries: 3
@@ -117,8 +141,11 @@ services:
       # di-inject ke image API supaya hostname `mqtt` terbaca sebagai SAN, dan
       # API memverifikasi sertifikat broker sungguhan — bukan `--insecure`.
       MQTT_TLS_CA_PATH: /run/nexahome/mqtt-ca.pem
-      MQTT_USERNAME: ${MQTT_USERNAME:-}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      # Kosong berarti broker TLS akan menolak semua koneksi dengan
+      # "not authorised" yang tidak menunjuk ke penyebabnya, jadi compose
+      # berhenti di sini dengan pesan yang menyebut perbaikannya.
+      MQTT_USERNAME: ${MQTT_USERNAME:?MQTT_USERNAME wajib diisi — jalankan ./scripts/mqtt-tls.sh lebih dulu.}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?MQTT_PASSWORD wajib diisi — jalankan ./scripts/mqtt-tls.sh lebih dulu.}
       # CA sudah di-inject, jadi verifikasi tetap hidup. Set false hanya bila
       # memakai CA yang tidak sengaja diubah tanpa memberi API CA baru.
       MQTT_TLS_REJECT_UNAUTHORIZED: "true"
@@ -135,12 +162,12 @@ services:
     volumes:
       # Hanya CA publik. Private key CA dan private key broker tidak pernah
       # masuk container API.
-      - ./docker/mosquitto/ca/ca.crt:/run/nexahome/mqtt-ca.pem:ro
+      - ./docker/mosquitto/config/ca.crt:/run/nexahome/mqtt-ca.pem:ro
     depends_on:
       postgres:
         condition: service_healthy
       mqtt:
-        condition: service_started
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
 

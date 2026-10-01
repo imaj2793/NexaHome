@@ -18,6 +18,7 @@ coverage/
 # Dibuat oleh scripts/mqtt-tls.sh, tidak boleh masuk repo.
 docker/mosquitto/certs/
 docker/mosquitto/ca/
+docker/mosquitto/config/ca.crt
 docker/mosquitto/config/passwd
 
 # logs

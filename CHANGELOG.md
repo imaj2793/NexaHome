@@ -16,6 +16,19 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ### Fixed
 
+- **Healthcheck broker selalu hijau.** Perintahnya berakhir dengan `|| exit 0`,
+  jadi walau publish ke 1883 gagal pun healthcheck tetap sukses — container
+  `unhealthy` tidak pernah terjadi dan `api` yang bergantung pada kesehatan
+  broker tidak pernah tertahan. Sekarang healthcheck publish ke 1883 **dan** ke
+  8883 memakai CA + password dari env, tanpa `|| exit 0`. Diuji: CA yang salah
+  membuat container `unhealthy` (streak 3), lalu hijau lagi setelah dikembalikan.
+  API juga diubah dari `condition: service_started` ke `service_healthy`, sesuai
+  yang diklaim dokumen.
+- **Compose diam-diam start tanpa kredensial broker.** `MQTT_USERNAME`/`MQTT_PASSWORD`
+  punya default kosong, jadi `docker compose up` berhasil lalu listener 8883/443
+  menolak semua koneksi dengan `not authorised` yang tidak menunjuk ke
+  penyebabnya. Sekarang keduanya wajib diisi (`:?`) dengan pesan yang menyebut
+  `./scripts/mqtt-tls.sh`.
 - **Kredensial integrasi yang kosong membuat broker menolak dengan `not authorised`.**
   `MqttAdapter.resolveTarget()` membandingkan kredensial integrasi dengan kredensial
   global apa adanya, sehingga integrasi yang tidak menyimpan `brokerUrl`/`username`
