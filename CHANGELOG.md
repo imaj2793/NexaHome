@@ -16,6 +16,11 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ### Fixed
 
+- **Perangkat bisa diarahkan ke ruangan milik rumah lain.** `DevicesService.update`
+  menulis `roomId` tanpa memverifikasi rumah asal ruangan, dan respons device
+  menyertakan `room` — jadi nama ruangan milik orang lain ikut terbaca. `create`
+  punya masalah yang sama. Sekarang keduanya menolak ruangan dari rumah lain
+  dengan 404.
 - **Tombol mikrofon Nexa berhenti berfungsi.** Saat panel Nexa ditulis ulang,
   `onClick` tombol rekam hilang sehingga perintah suara tidak bisa dipakai sama
   sekali. Sekarang tertangkap test
@@ -43,6 +48,12 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 - **Kontrol mati dihapus dari halaman login.** "Ingat saya" tidak pernah dipakai
   dan "lupa password" tidak punya endpoint, jadi keduanya dihapus sebagai ganti
   menampilkan tombol yang tidak melakukan apa pun.
+- **Kolom `HomeMember.role` dihapus** (default `USER`, enum `ADMIN|OWNER|USER`)
+  lewat migrasi `20260930160920_drop_home_member_role`. Kolom itu tidak pernah
+  dibaca kode — `ADMIN` dan `USER` selalu berperilaku sama sehingga hanya
+  menyesatkan. Enum `Role` tetap dipakai `User.role`.
+- `docs/API.md` mengklaim `POST /homes/:id/members` menerima `role: USER|ADMIN`.
+  Field itu tidak pernah ada dan sudah dibuang oleh whitelist DTO.
 - **Integrasi WiZ dihapus** (`@nexahome/integration-wiz`, enum `IntegrationType.WIZ`).
   Protokol UDP port 38899 hanya berfungsi bila API berjalan langsung di jaringan
   lokal: dari dalam container, broadcast keluar tetapi balasan unicast dari lampu
@@ -58,6 +69,21 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ### Added
 
+- **E2E keamanan dijalankan terhadap API sungguhan** (`apps/api/test/security.e2e-spec.ts`,
+  19 test) lewat socket.io-client dan supertest, menggantikan verifikasi manual
+  via curl. Cakupannya: handshake WebSocket tanpa token, token rusak, token milik
+  user yang sudah dihapus, dan token via query string; isolasi antar-home di
+  WebSocket termasuk event perangkat rumah lain yang tidak boleh sampai; isolasi
+  HTTP antar tenant; serta kredensial integrasi yang tidak pernah kembali apa
+  adanya.
+- `apps/api/test/adapter-credentials.spec.ts` (14 test) mengunci enkripsi,
+  dekripsi, dan penerusan kredensial ke adapter.
+- `test/setup.ts` menyediakan `INTEGRATION_CREDENTIALS_KEY` dummy agar env test
+  tidak bergantung pada `.env` lokal yang di-gitignore.
+- Timeout yang sebelumnya tidak ada kini eksplisit di adapter MQTT: publish 5
+  detik (`PUBLISH_TIMEOUT_MS`) dan pembacaan state 3 detik
+  (`STATE_READ_TIMEOUT_MS`) — mqtt v5 tidak punya opsi timeout, sehingga TCP yang
+  menggantung akan menahan request HTTP tanpa batas.
 - **Auth**: refresh token dengan rotasi + deteksi reuse, endpoint `POST /api/auth/refresh`
   dan `POST /api/auth/logout`, rate limiting pada endpoint auth.
 - **Test suite**: Vitest untuk API (18 file / 354 test) dan web (3 file / 79 test),
@@ -79,6 +105,31 @@ Commit mengikuti [Conventional Commits](https://www.conventionalcommits.org/id/v
 
 ### Changed
 
+- **Kredensial integrasi kini benar-benar dipakai, bukan hanya disimpan.**
+  Sebelumnya envelope hanya didekripsi saat dibaca lewat API, sementara perintah
+  ke perangkat tetap memakai kredensial global dari environment. Sekarang
+  `DeviceCoreService` meneruskannya ke adapter sebagai `AdapterCredentials`:
+  - MQTT memakai koneksi utama yang sudah dijaga adapter bila broker integrasi
+    sama dengan broker utama, dan koneksi sekali pakai bila berbeda. Kredensial
+    dibaca di `executeCommand`, `getDeviceState`, dan `discoverDevices`.
+  - Broker kedua punya batas yang kini terdokumentasi: publish tidak
+    meng-update cache state, `getDeviceState` membaca satu state sekali pakai,
+    dan discovery hanya mendengarkan pengumuman selama `discoveryWindowMs`.
+  - Scan ke broker kedua tidak memakai cache broker utama sebagai cadangan,
+    karena perangkat di sana milik integrasi lain.
+  - Tasmota memakai HTTP Basic dari `username`/`password` kredensial integrasi.
+  - Kunci yang salah atau envelope rusak membatalkan perintah dengan
+    `INTEGRATION_CREDENTIALS_INVALID`, bukan melanjutkan tanpa kredensial yang
+    akan mengirim perintah ke broker/perangkat global.
+  - `toAdapterError` meneruskan `ApiError`/`HttpException` tanpa menerjemahkan
+    ulang.
+  - Vitest meng-inline adapter ke source-nya; tanpa itu test menguji `dist` CJS
+    yang basi dan `vi.mock` tidak meng-intercept mqtt.
+- **Anggota rumah mendapat kontrol penuh atas isi rumah** — create, update, dan
+  delete device serta room, plus kirim command. Lingkup yang tetap milik pemilik
+  saja: ubah/hapus rumah, tambah/keluarkan anggota, dan seluruh operasi
+  integrasi termasuk kredensial. Penolakan kini memakai 404, bukan 403, supaya
+  keberadaan sumber daya tidak terkonfirmasi.
 - API dikonfigurasi ulang untuk ESM (`"type": "module"`), kompatibel dengan
   NestJS 12.
 - Web memakai Next.js 15 + React 19 dengan output standalone untuk image Docker.
